@@ -8,6 +8,8 @@ import DashboardPage from '@/app/pages/DashboardPage';
 import MediaPage from '@/app/pages/MediaPage';
 import NetworkGraphPage from '@/app/pages/NetworkGraphPage';
 
+import LoginPage from '@/app/pages/LoginPage';
+
 export default function App() {
   return (
     <WatershedProvider>
@@ -16,6 +18,7 @@ export default function App() {
           <Navigation />
           <Routes>
             <Route path="/" element={<HomePage />} />
+            <Route path="/login" element={<LoginPage />} />
             <Route path="/create-project" element={<CreateProjectPage />} />
             <Route path="/tagging" element={<TaggingPage />} />
             <Route path="/dashboard" element={<DashboardPage />} />
