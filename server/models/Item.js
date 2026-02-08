@@ -6,6 +6,10 @@ const ItemSchema = new mongoose.Schema({
         ref: 'User',
         required: true
     },
+    fileId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'fs.files' // Reference to GridFS file
+    },
     title: {
         type: String,
         required: true
@@ -18,7 +22,7 @@ const ItemSchema = new mongoose.Schema({
         required: true
     },
     storageType: {
-        type: String, // e.g., 'local', 's3'
+        type: String, // e.g., 'local', 's3', 'gridfs'
         default: 'local'
     },
     filePath: {

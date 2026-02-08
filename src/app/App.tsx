@@ -6,6 +6,8 @@ import CreateProjectPage from '@/app/pages/CreateProjectPage';
 import TaggingPage from '@/app/pages/TaggingPage';
 import DashboardPage from '@/app/pages/DashboardPage';
 import MediaPage from '@/app/pages/MediaPage';
+import CreateMediaPage from '@/app/pages/CreateMediaPage';
+import MediaDetailPage from '@/app/pages/MediaDetailPage';
 import NetworkGraphPage from '@/app/pages/NetworkGraphPage';
 
 import LoginPage from '@/app/pages/LoginPage';
@@ -19,10 +21,10 @@ export default function App() {
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/login" element={<LoginPage />} />
-            <Route path="/create-project" element={<CreateProjectPage />} />
-            <Route path="/tagging" element={<TaggingPage />} />
-            <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/media" element={<MediaPage />} />
+            <Route path="/media/create" element={<CreateMediaPage />} />
+            <Route path="/media/:id" element={<MediaDetailPage />} />
+            <Route path="/create-project" element={<CreateProjectPage />} />
             <Route path="/network" element={<NetworkGraphPage />} />
           </Routes>
         </div>

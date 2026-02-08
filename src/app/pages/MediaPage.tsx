@@ -1,31 +1,55 @@
-import { useState, useMemo } from 'react';
-import { useWatershed } from '@/app/context/WatershedContext';
-import { Search, Filter, FileText, Image, Video, Music, Code, Tag } from 'lucide-react';
+import { useState, useMemo, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { api } from '../services/api'; // Import API service
+import { Search, Filter, FileText, Image, Video, Music, Code, Tag, Plus } from 'lucide-react';
 
 const MediaPage = () => {
-  const { media, projects } = useWatershed();
+  const navigate = useNavigate();
+  const [media, setMedia] = useState<any[]>([]); // State for media items
+  const [projects, setProjects] = useState<any[]>([]); // State for projects
+  const [loading, setLoading] = useState(true);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedType, setSelectedType] = useState<string>('all');
   const [selectedProject, setSelectedProject] = useState<string>('all');
   const [selectedTag, setSelectedTag] = useState<string>('all');
 
-  const allTags = Array.from(new Set(media.flatMap(m => m.tags))).sort();
+  // Fetch data on mount
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [mediaData, projectsData] = await Promise.all([
+          api.getItems(),
+          api.getProjects()
+        ]);
+        setMedia(mediaData);
+        setProjects(projectsData);
+      } catch (error) {
+        console.error('Failed to load media:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
+
+  const allTags = useMemo(() => Array.from(new Set(media.flatMap(m => m.tagIds?.map((t: any) => t.name) || []))).sort(), [media]);
 
   const filteredMedia = useMemo(() => {
     return media.filter(item => {
       // Search filter
-      const matchesSearch = searchQuery === '' || 
+      const matchesSearch = searchQuery === '' ||
         item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         item.description.toLowerCase().includes(searchQuery.toLowerCase());
 
       // Type filter
-      const matchesType = selectedType === 'all' || item.type === selectedType;
+      const matchesType = selectedType === 'all' || item.mediaType === selectedType;
 
       // Project filter
-      const matchesProject = selectedProject === 'all' || item.projectId === selectedProject;
+      const matchesProject = selectedProject === 'all' || item.projectIds?.some((p: any) => p._id === selectedProject);
 
       // Tag filter
-      const matchesTag = selectedTag === 'all' || item.tags.includes(selectedTag);
+      const matchesTag = selectedTag === 'all' || item.tagIds?.some((t: any) => t.name === selectedTag);
 
       return matchesSearch && matchesType && matchesProject && matchesTag;
     });
@@ -45,20 +69,31 @@ const MediaPage = () => {
   const getTypeColor = (type: string) => {
     switch (type) {
       case 'document': return 'bg-blue-100 text-blue-700';
-      case 'image': return 'bg-blue-100 text-blue-700';
-      case 'video': return 'bg-blue-100 text-blue-700';
-      case 'audio': return 'bg-blue-100 text-blue-700';
-      case 'code': return 'bg-blue-100 text-blue-700';
+      case 'image': return 'bg-purple-100 text-purple-700';
+      case 'video': return 'bg-red-100 text-red-700';
+      case 'audio': return 'bg-yellow-100 text-yellow-700';
+      case 'code': return 'bg-green-100 text-green-700';
       default: return 'bg-gray-100 text-gray-700';
     }
   };
 
+  if (loading) return <div className="p-10 text-center">Loading media...</div>;
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white">
       <div className="container mx-auto px-6 py-12">
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-blue-900 mb-2">Media Library</h1>
-          <p className="text-gray-600">Search and filter your research materials</p>
+        <div className="mb-8 flex justify-between items-center">
+          <div>
+            <h1 className="text-4xl font-bold text-blue-900 mb-2">Media Library</h1>
+            <p className="text-gray-600">Search and filter your research materials</p>
+          </div>
+          <button
+            onClick={() => navigate('/media/create')}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
+          >
+            <Plus className="size-5" />
+            Add Media
+          </button>
         </div>
 
         {/* Search and Filters */}
@@ -106,7 +141,7 @@ const MediaPage = () => {
             >
               <option value="all">All Projects</option>
               {projects.map(project => (
-                <option key={project.id} value={project.id}>{project.name}</option>
+                <option key={project._id} value={project._id}>{project.title}</option>
               ))}
             </select>
 
@@ -117,7 +152,7 @@ const MediaPage = () => {
               className="px-4 py-2 rounded-lg border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
             >
               <option value="all">All Tags</option>
-              {allTags.map(tag => (
+              {allTags.map((tag: any) => (
                 <option key={tag} value={tag}>{tag}</option>
               ))}
             </select>
@@ -133,59 +168,61 @@ const MediaPage = () => {
         {filteredMedia.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredMedia.map((item) => {
-              const Icon = getMediaIcon(item.type);
-              const project = projects.find(p => p.id === item.projectId);
-              
+              const Icon = getMediaIcon(item.mediaType);
+
               return (
                 <div
-                  key={item.id}
-                  className="bg-white rounded-xl p-6 shadow-sm border border-blue-100 hover:shadow-md transition-shadow"
+                  key={item._id}
+                  onClick={() => navigate(`/media/${item._id}`)}
+                  className="bg-white rounded-xl p-6 shadow-sm border border-blue-100 hover:shadow-md transition-shadow cursor-pointer"
                 >
                   <div className="flex items-start gap-4 mb-4">
-                    <div className={`p-3 rounded-lg ${getTypeColor(item.type)}`}>
+                    <div className={`p-3 rounded-lg ${getTypeColor(item.mediaType)}`}>
                       <Icon className="size-6" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <h3 className="font-semibold text-blue-900 mb-1 truncate">{item.title}</h3>
-                      <p className="text-xs text-gray-500 capitalize">{item.type}</p>
+                      <p className="text-xs text-gray-500 capitalize">{item.mediaType}</p>
                     </div>
                   </div>
 
                   <p className="text-sm text-gray-600 mb-4 line-clamp-2">{item.description}</p>
 
-                  {/* Project Badge */}
-                  {project && (
-                    <div className="mb-3">
-                      <div
-                        className="inline-flex items-center gap-2 px-3 py-1 rounded-lg text-xs font-medium"
-                        style={{ backgroundColor: project.color + '20', color: project.color }}
-                      >
-                        {project.name}
-                      </div>
+                  {/* Project Badges */}
+                  {item.projectIds && item.projectIds.length > 0 && (
+                    <div className="mb-3 flex flex-wrap gap-1">
+                      {item.projectIds.map((p: any) => (
+                        <div
+                          key={p._id}
+                          className="inline-flex items-center gap-2 px-3 py-1 rounded-lg text-xs font-medium bg-blue-50 text-blue-600"
+                        >
+                          {p.title}
+                        </div>
+                      ))}
                     </div>
                   )}
 
                   {/* Tags */}
                   <div className="flex flex-wrap gap-2 mb-3">
-                    {item.tags.slice(0, 3).map(tag => (
+                    {item.tagIds?.slice(0, 3).map((tag: any) => (
                       <span
-                        key={tag}
-                        className="inline-flex items-center gap-1 px-2 py-1 rounded bg-blue-50 text-blue-700 text-xs"
+                        key={tag._id}
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded bg-gray-50 text-gray-600 text-xs"
                       >
                         <Tag className="size-3" />
-                        {tag}
+                        {tag.name}
                       </span>
                     ))}
-                    {item.tags.length > 3 && (
+                    {item.tagIds?.length > 3 && (
                       <span className="px-2 py-1 rounded bg-gray-100 text-gray-600 text-xs">
-                        +{item.tags.length - 3}
+                        +{item.tagIds.length - 3}
                       </span>
                     )}
                   </div>
 
                   {/* Metadata */}
                   <div className="text-xs text-gray-500 pt-3 border-t border-gray-100">
-                    Added {new Date(item.dateAdded).toLocaleDateString()}
+                    Added {new Date(item.createdAt).toLocaleDateString()}
                   </div>
                 </div>
               );
