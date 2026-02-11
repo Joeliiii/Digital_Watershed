@@ -9,6 +9,7 @@ export interface MediaItem {
   projectId: string;
   dateAdded: string;
   relatedMedia: string[];
+  fileSize?: number; 
 }
 
 export interface Project {
@@ -19,13 +20,24 @@ export interface Project {
   color: string;
 }
 
+export interface Tag {
+  id: string;
+  name: string;
+  color: string;
+  description?: string; 
+  createdAt: string;    
+}
+
 interface WatershedContextType {
   projects: Project[];
+  setProjects: React.Dispatch<React.SetStateAction<Project[]>>;
   media: MediaItem[];
   addProject: (project: Omit<Project, 'id' | 'createdAt'>) => void;
   addMedia: (media: Omit<MediaItem, 'id' | 'dateAdded'>) => void;
   updateMedia: (id: string, updates: Partial<MediaItem>) => void;
   deleteMedia: (id: string) => void;
+  tags: Tag[]; 
+  setTags: React.Dispatch<React.SetStateAction<Tag[]>>;
 }
 
 const WatershedContext = createContext<WatershedContextType | undefined>(undefined);
@@ -109,6 +121,30 @@ export const WatershedProvider = ({ children }: { children: ReactNode }) => {
     },
   ]);
 
+  const [tags, setTags] = useState<Tag[]>([
+  {
+    id: '1',
+    name: 'Research',
+    color: '#3B82F6', // Blue
+    description: 'General academic and field research data.',
+    createdAt: new Date('2024-01-15').toISOString(),
+  },
+  {
+    id: '2',
+    name: 'Case Study',
+    color: '#10B981', // Green
+    description: 'In-depth analysis of specific watershed restoration projects and their long-term ecological outcomes.',
+    createdAt: new Date('2024-03-05').toISOString()
+  },
+  {
+    id: '3',
+    name: 'Documentation',
+    color: '#8B5CF6', // Purple
+    description: 'Documentation on extensive sabbatical research and experience.',
+    createdAt: new Date('2024-03-12').toISOString()
+  }
+]);
+
   const addProject = (project: Omit<Project, 'id' | 'createdAt'>) => {
     const newProject: Project = {
       ...project,
@@ -139,11 +175,14 @@ export const WatershedProvider = ({ children }: { children: ReactNode }) => {
     <WatershedContext.Provider
       value={{
         projects,
+        setProjects,
         media,
         addProject,
         addMedia,
         updateMedia,
         deleteMedia,
+        tags,
+        setTags,
       }}
     >
       {children}
