@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
-import { Save, ArrowLeft, Plus } from 'lucide-react';
+import { Save, ArrowLeft, Plus, Upload, X } from 'lucide-react';
+import { getMediaLabel, getMediaCategory, getTypeColor, getMediaIcon } from '../utils/mediaUtils';
 
 const CreateMediaPage = () => {
     const navigate = useNavigate();
@@ -10,6 +11,7 @@ const CreateMediaPage = () => {
     const [tags, setTags] = useState<any[]>([]);
     const [newTag, setNewTag] = useState('');
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
+    const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null);
 
     const [formData, setFormData] = useState({
         title: '',
@@ -46,13 +48,29 @@ const CreateMediaPage = () => {
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
-            setSelectedFile(e.target.files[0]);
-            // Auto-detect media type if possible
-            const type = e.target.files[0].type;
-            if (type.startsWith('image/')) setFormData(prev => ({ ...prev, mediaType: 'image' }));
-            else if (type.startsWith('video/')) setFormData(prev => ({ ...prev, mediaType: 'video' }));
-            else if (type.startsWith('audio/')) setFormData(prev => ({ ...prev, mediaType: 'audio' }));
+            const file = e.target.files[0];
+            setSelectedFile(file);
+
+            // Auto-detect MIME type from the file
+            const detectedType = file.type || 'application/octet-stream';
+            setFormData(prev => ({ ...prev, mediaType: detectedType }));
+
+            // Create preview URL for previewable types
+            if (filePreviewUrl) URL.revokeObjectURL(filePreviewUrl);
+            const category = getMediaCategory(detectedType);
+            if (['image', 'video', 'audio'].includes(category)) {
+                setFilePreviewUrl(URL.createObjectURL(file));
+            } else {
+                setFilePreviewUrl(null);
+            }
         }
+    };
+
+    const handleRemoveFile = () => {
+        setSelectedFile(null);
+        if (filePreviewUrl) URL.revokeObjectURL(filePreviewUrl);
+        setFilePreviewUrl(null);
+        setFormData(prev => ({ ...prev, mediaType: 'document' }));
     };
 
     const handleMultiSelect = (e: React.ChangeEvent<HTMLSelectElement>, field: 'projectIds' | 'tagIds') => {
@@ -183,31 +201,50 @@ const CreateMediaPage = () => {
                                 </div>
                             </div>
 
-                            {/* Type & File */}
+                            {/* File Upload & Preview */}
                             <div className="space-y-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Media Type</label>
-                                    <select
-                                        name="mediaType"
-                                        value={formData.mediaType}
-                                        onChange={handleChange}
-                                        className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none"
-                                    >
-                                        <option value="document">Document (PDF, Doc)</option>
-                                        <option value="image">Image</option>
-                                        <option value="video">Video</option>
-                                        <option value="audio">Audio</option>
-                                        <option value="code">Code / Data</option>
-                                    </select>
-                                </div>
-
-                                <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Select File</label>
-                                    <input
-                                        type="file"
-                                        onChange={handleFileChange}
-                                        className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none"
-                                    />
+                                    {!selectedFile ? (
+                                        <label className="flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-blue-400 hover:bg-blue-50/50 transition-colors">
+                                            <Upload className="size-8 text-gray-400 mb-2" />
+                                            <span className="text-sm text-gray-500">Click to select any file</span>
+                                            <span className="text-xs text-gray-400 mt-1">All file types supported</span>
+                                            <input type="file" className="hidden" onChange={handleFileChange} />
+                                        </label>
+                                    ) : (
+                                        <div className="border border-gray-200 rounded-lg overflow-hidden">
+                                            {/* File info bar */}
+                                            <div className="flex items-center justify-between bg-gray-50 px-4 py-2 border-b border-gray-200">
+                                                <div className="flex items-center gap-2 min-w-0">
+                                                    {(() => { const Icon = getMediaIcon(formData.mediaType); return <Icon className="size-4 text-gray-600 shrink-0" />; })()}
+                                                    <span className="text-sm text-gray-700 truncate">{selectedFile.name}</span>
+                                                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getTypeColor(formData.mediaType)}`}>
+                                                        {getMediaLabel(formData.mediaType)}
+                                                    </span>
+                                                </div>
+                                                <button type="button" onClick={handleRemoveFile} className="text-gray-400 hover:text-red-500 transition-colors">
+                                                    <X className="size-4" />
+                                                </button>
+                                            </div>
+                                            {/* Live preview */}
+                                            {filePreviewUrl && getMediaCategory(formData.mediaType) === 'image' && (
+                                                <div className="bg-gray-100 flex items-center justify-center p-4">
+                                                    <img src={filePreviewUrl} alt="Preview" className="max-h-48 max-w-full object-contain rounded" />
+                                                </div>
+                                            )}
+                                            {filePreviewUrl && getMediaCategory(formData.mediaType) === 'video' && (
+                                                <div className="bg-black flex items-center justify-center">
+                                                    <video src={filePreviewUrl} controls className="max-h-48 max-w-full" />
+                                                </div>
+                                            )}
+                                            {filePreviewUrl && getMediaCategory(formData.mediaType) === 'audio' && (
+                                                <div className="bg-gray-100 p-4">
+                                                    <audio src={filePreviewUrl} controls className="w-full" />
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                     <p className="text-xs text-gray-500 mt-1">File will be stored securely in the database.</p>
                                 </div>
                             </div>

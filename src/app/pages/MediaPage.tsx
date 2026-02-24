@@ -1,7 +1,8 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api } from '../services/api'; // Import API service
-import { Search, Filter, FileText, Image, Video, Music, Code, Tag, Plus } from 'lucide-react';
+import { api } from '../services/api';
+import { Search, Filter, Tag, Plus } from 'lucide-react';
+import { getMediaIcon, getTypeColor, getMediaCategory, getMediaLabel } from '../utils/mediaUtils';
 
 const MediaPage = () => {
   const navigate = useNavigate();
@@ -35,15 +36,35 @@ const MediaPage = () => {
 
   const allTags = useMemo(() => Array.from(new Set(media.flatMap(m => m.tagIds?.map((t: any) => t.name) || []))).sort(), [media]);
 
+  // Derive available type categories dynamically from the data
+  const availableTypes = useMemo(() => {
+    const categories = new Set<string>();
+    media.forEach(item => {
+      const cat = getMediaCategory(item.metadata?.mimetype || item.mediaType);
+      categories.add(cat);
+    });
+    return Array.from(categories).sort();
+  }, [media]);
+
+  const categoryLabels: Record<string, string> = {
+    document: 'Documents',
+    image: 'Images',
+    video: 'Videos',
+    audio: 'Audio',
+    code: 'Code',
+    other: 'Other',
+  };
+
   const filteredMedia = useMemo(() => {
     return media.filter(item => {
-      // Search filter
+      // Search filter — safe against missing description
       const matchesSearch = searchQuery === '' ||
-        item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.description.toLowerCase().includes(searchQuery.toLowerCase());
+        (item.title || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (item.description || '').toLowerCase().includes(searchQuery.toLowerCase());
 
-      // Type filter
-      const matchesType = selectedType === 'all' || item.mediaType === selectedType;
+      // Type filter — compare by category
+      const itemCategory = getMediaCategory(item.metadata?.mimetype || item.mediaType);
+      const matchesType = selectedType === 'all' || itemCategory === selectedType;
 
       // Project filter
       const matchesProject = selectedProject === 'all' || item.projectIds?.some((p: any) => p._id === selectedProject);
@@ -55,27 +76,7 @@ const MediaPage = () => {
     });
   }, [media, searchQuery, selectedType, selectedProject, selectedTag]);
 
-  const getMediaIcon = (type: string) => {
-    switch (type) {
-      case 'document': return FileText;
-      case 'image': return Image;
-      case 'video': return Video;
-      case 'audio': return Music;
-      case 'code': return Code;
-      default: return FileText;
-    }
-  };
 
-  const getTypeColor = (type: string) => {
-    switch (type) {
-      case 'document': return 'bg-blue-100 text-blue-700';
-      case 'image': return 'bg-purple-100 text-purple-700';
-      case 'video': return 'bg-red-100 text-red-700';
-      case 'audio': return 'bg-yellow-100 text-yellow-700';
-      case 'code': return 'bg-green-100 text-green-700';
-      default: return 'bg-gray-100 text-gray-700';
-    }
-  };
 
   if (loading) return <div className="p-10 text-center">Loading media...</div>;
 
@@ -126,11 +127,9 @@ const MediaPage = () => {
               className="px-4 py-2 rounded-lg border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
             >
               <option value="all">All Types</option>
-              <option value="document">Documents</option>
-              <option value="image">Images</option>
-              <option value="video">Videos</option>
-              <option value="audio">Audio</option>
-              <option value="code">Code</option>
+              {availableTypes.map(cat => (
+                <option key={cat} value={cat}>{categoryLabels[cat] || cat}</option>
+              ))}
             </select>
 
             {/* Project Filter */}
@@ -168,61 +167,78 @@ const MediaPage = () => {
         {filteredMedia.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredMedia.map((item) => {
-              const Icon = getMediaIcon(item.mediaType);
+              const mimeType = item.metadata?.mimetype || item.mediaType;
+              const Icon = getMediaIcon(mimeType);
+              const category = getMediaCategory(mimeType);
+              const isImage = category === 'image' && item.fileId;
 
               return (
                 <div
                   key={item._id}
                   onClick={() => navigate(`/media/${item._id}`)}
-                  className="bg-white rounded-xl p-6 shadow-sm border border-blue-100 hover:shadow-md transition-shadow cursor-pointer"
+                  className="bg-white rounded-xl shadow-sm border border-blue-100 hover:shadow-md transition-shadow cursor-pointer overflow-hidden"
                 >
-                  <div className="flex items-start gap-4 mb-4">
-                    <div className={`p-3 rounded-lg ${getTypeColor(item.mediaType)}`}>
-                      <Icon className="size-6" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold text-blue-900 mb-1 truncate">{item.title}</h3>
-                      <p className="text-xs text-gray-500 capitalize">{item.mediaType}</p>
-                    </div>
-                  </div>
-
-                  <p className="text-sm text-gray-600 mb-4 line-clamp-2">{item.description}</p>
-
-                  {/* Project Badges */}
-                  {item.projectIds && item.projectIds.length > 0 && (
-                    <div className="mb-3 flex flex-wrap gap-1">
-                      {item.projectIds.map((p: any) => (
-                        <div
-                          key={p._id}
-                          className="inline-flex items-center gap-2 px-3 py-1 rounded-lg text-xs font-medium bg-blue-50 text-blue-600"
-                        >
-                          {p.title}
-                        </div>
-                      ))}
+                  {/* Thumbnail for images */}
+                  {isImage && (
+                    <div className="h-40 bg-gray-100 flex items-center justify-center overflow-hidden">
+                      <img
+                        src={`http://localhost:5000/api/items/${item._id}/file`}
+                        alt={item.title}
+                        className="w-full h-full object-cover"
+                        loading="lazy"
+                      />
                     </div>
                   )}
 
-                  {/* Tags */}
-                  <div className="flex flex-wrap gap-2 mb-3">
-                    {item.tagIds?.slice(0, 3).map((tag: any) => (
-                      <span
-                        key={tag._id}
-                        className="inline-flex items-center gap-1 px-2 py-1 rounded bg-gray-50 text-gray-600 text-xs"
-                      >
-                        <Tag className="size-3" />
-                        {tag.name}
-                      </span>
-                    ))}
-                    {item.tagIds?.length > 3 && (
-                      <span className="px-2 py-1 rounded bg-gray-100 text-gray-600 text-xs">
-                        +{item.tagIds.length - 3}
-                      </span>
-                    )}
-                  </div>
+                  <div className="p-6">
+                    <div className="flex items-start gap-4 mb-4">
+                      <div className={`p-3 rounded-lg ${getTypeColor(mimeType)}`}>
+                        <Icon className="size-6" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-semibold text-blue-900 mb-1 truncate">{item.title}</h3>
+                        <p className="text-xs text-gray-500">{getMediaLabel(mimeType)}</p>
+                      </div>
+                    </div>
 
-                  {/* Metadata */}
-                  <div className="text-xs text-gray-500 pt-3 border-t border-gray-100">
-                    Added {new Date(item.createdAt).toLocaleDateString()}
+                    <p className="text-sm text-gray-600 mb-4 line-clamp-2">{item.description || ''}</p>
+
+                    {/* Project Badges */}
+                    {item.projectIds && item.projectIds.length > 0 && (
+                      <div className="mb-3 flex flex-wrap gap-1">
+                        {item.projectIds.map((p: any) => (
+                          <div
+                            key={p._id}
+                            className="inline-flex items-center gap-2 px-3 py-1 rounded-lg text-xs font-medium bg-blue-50 text-blue-600"
+                          >
+                            {p.title}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Tags */}
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      {item.tagIds?.slice(0, 3).map((tag: any) => (
+                        <span
+                          key={tag._id}
+                          className="inline-flex items-center gap-1 px-2 py-1 rounded bg-gray-50 text-gray-600 text-xs"
+                        >
+                          <Tag className="size-3" />
+                          {tag.name}
+                        </span>
+                      ))}
+                      {item.tagIds?.length > 3 && (
+                        <span className="px-2 py-1 rounded bg-gray-100 text-gray-600 text-xs">
+                          +{item.tagIds.length - 3}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Metadata */}
+                    <div className="text-xs text-gray-500 pt-3 border-t border-gray-100">
+                      Added {new Date(item.createdAt).toLocaleDateString()}
+                    </div>
                   </div>
                 </div>
               );

@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../services/api.ts';
-import { ArrowLeft, Save, Trash2, Edit } from 'lucide-react';
+import { ArrowLeft, Save, Trash2, Edit, Download } from 'lucide-react';
+import MediaPreview from '../components/MediaPreview';
+import { getMediaLabel } from '../utils/mediaUtils';
 
 const MediaDetailPage = () => {
     const { id } = useParams<{ id: string }>();
@@ -117,6 +119,16 @@ const MediaDetailPage = () => {
                             </div>
                         ) : (
                             <div className="space-y-6">
+                                {/* Media Preview */}
+                                {item.fileId && (
+                                    <MediaPreview
+                                        itemId={item._id}
+                                        mimeType={item.metadata?.mimetype || item.mediaType}
+                                        fileName={item.metadata?.originalName}
+                                        fileSize={item.metadata?.size}
+                                    />
+                                )}
+
                                 <div>
                                     <h3 className="text-sm font-semibold text-gray-500 uppercase">Description</h3>
                                     <p className="mt-1 text-gray-900">{item.description || 'No description provided.'}</p>
@@ -124,23 +136,21 @@ const MediaDetailPage = () => {
                                 <div className="grid grid-cols-2 gap-6">
                                     <div>
                                         <h3 className="text-sm font-semibold text-gray-500 uppercase">Type</h3>
-                                        <p className="mt-1 capitalize">{item.mediaType}</p>
+                                        <p className="mt-1">{getMediaLabel(item.metadata?.mimetype || item.mediaType)}</p>
                                     </div>
                                     <div>
-                                        <h3 className="text-sm font-semibold text-gray-500 uppercase">Storage</h3>
-                                        {item.storageType === 'gridfs' ? (
-                                            <div className="mt-1">
-                                                <a
-                                                    href={`http://localhost:5000/api/items/${item._id}/file`}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    className="text-blue-600 hover:text-blue-800 underline flex items-center gap-2"
-                                                >
-                                                    Download File
-                                                </a>
-                                            </div>
+                                        <h3 className="text-sm font-semibold text-gray-500 uppercase">File</h3>
+                                        {item.fileId ? (
+                                            <a
+                                                href={`http://localhost:5000/api/items/${item._id}/file`}
+                                                download
+                                                className="mt-1 inline-flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
+                                            >
+                                                <Download className="size-4" />
+                                                Download
+                                            </a>
                                         ) : (
-                                            <p className="mt-1 capitalize">{item.storageType}: {item.storageType === 'url' ? item.externalUrl : item.filePath}</p>
+                                            <p className="mt-1 text-gray-500 text-sm">No file attached</p>
                                         )}
                                     </div>
                                 </div>
