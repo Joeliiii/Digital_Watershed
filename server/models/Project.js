@@ -13,6 +13,10 @@ const ProjectSchema = new mongoose.Schema({
     description: {
         type: String
     },
+    color: {
+        type: String,
+        default: '#3B82F6'
+    },
     visibility: {
         type: String,
         enum: ['public', 'private', 'shared'],

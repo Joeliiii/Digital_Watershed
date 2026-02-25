@@ -120,7 +120,7 @@ const createItem = async (req, res) => {
     }
 };
 
-// @desc    Get item file (stream)
+// @desc    Get item file (stream) — supports Range headers for video/audio seek
 // @route   GET /api/items/:id/file
 // @access  Private (or Public with token?)
 const getItemFile = async (req, res) => {
@@ -130,25 +130,63 @@ const getItemFile = async (req, res) => {
             return res.status(404).json({ message: 'File not found' });
         }
 
-        // Get GridFS Bucket
-        // Note: access mongoose connection to get db
         const mongoose = (await import('mongoose')).default;
         const bucket = new mongoose.mongo.GridFSBucket(mongoose.connection.db, {
             bucketName: 'fs'
         });
 
-        const downloadStream = bucket.openDownloadStream(item.fileId);
-
-        downloadStream.on('error', (error) => {
-            res.status(404).json({ message: 'File not found in storage' });
-        });
-
-        // Optional: Set Content-Type if available in metadata
-        if (item.metadata && item.metadata.mimetype) {
-            res.set('Content-Type', item.metadata.mimetype);
+        // Look up file metadata from GridFS to get total size
+        const files = await bucket.find({ _id: item.fileId }).toArray();
+        if (!files || files.length === 0) {
+            return res.status(404).json({ message: 'File not found in storage' });
         }
+        const fileInfo = files[0];
+        const fileSize = fileInfo.length;
+        const mimeType = (item.metadata && item.metadata.mimetype) || 'application/octet-stream';
+        const fileName = (item.metadata && item.metadata.originalName) || fileInfo.filename || 'download';
 
-        downloadStream.pipe(res);
+        // Determine if this type should be viewed inline or downloaded
+        const inlineTypes = ['image/', 'video/', 'audio/', 'application/pdf', 'text/'];
+        const isInline = inlineTypes.some(t => mimeType.startsWith(t));
+        const disposition = isInline ? 'inline' : 'attachment';
+
+        // Handle Range requests (for video/audio seeking)
+        const rangeHeader = req.headers.range;
+        if (rangeHeader) {
+            const parts = rangeHeader.replace(/bytes=/, '').split('-');
+            const start = parseInt(parts[0], 10);
+            const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+            const chunkSize = end - start + 1;
+
+            res.status(206);
+            res.set({
+                'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+                'Accept-Ranges': 'bytes',
+                'Content-Length': chunkSize,
+                'Content-Type': mimeType,
+                'Content-Disposition': `${disposition}; filename="${encodeURIComponent(fileName)}"`,
+            });
+
+            const downloadStream = bucket.openDownloadStream(item.fileId, { start, end: end + 1 });
+            downloadStream.on('error', () => {
+                if (!res.headersSent) res.status(404).json({ message: 'File not found in storage' });
+            });
+            downloadStream.pipe(res);
+        } else {
+            // Full file response
+            res.set({
+                'Content-Type': mimeType,
+                'Content-Length': fileSize,
+                'Accept-Ranges': 'bytes',
+                'Content-Disposition': `${disposition}; filename="${encodeURIComponent(fileName)}"`,
+            });
+
+            const downloadStream = bucket.openDownloadStream(item.fileId);
+            downloadStream.on('error', () => {
+                if (!res.headersSent) res.status(404).json({ message: 'File not found in storage' });
+            });
+            downloadStream.pipe(res);
+        }
 
     } catch (error) {
         res.status(500).json({ message: error.message });
@@ -167,7 +205,7 @@ const updateItem = async (req, res) => {
             const updatedItem = await Item.findByIdAndUpdate(req.params.id, req.body, {
                 new: true,
                 runValidators: true
-            });
+            }).populate('tagIds').populate('projectIds');
             res.json(updatedItem);
         } else {
             res.status(404).json({ message: 'Item not found' });

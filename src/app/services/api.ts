@@ -51,6 +51,28 @@ export const api = {
         const response = await fetch(`${API_URL}/projects`);
         return handleResponse(response);
     },
+    createProject: async (data: any) => {
+        const response = await fetch(`${API_URL}/projects`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        });
+        return handleResponse(response);
+    },
+    updateProject: async (id: string, data: any) => {
+        const response = await fetch(`${API_URL}/projects/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        });
+        return handleResponse(response);
+    },
+    deleteProject: async (id: string) => {
+        const response = await fetch(`${API_URL}/projects/${id}`, {
+            method: 'DELETE',
+        });
+        return handleResponse(response);
+    },
 
     // Tags
     getTags: async () => {
@@ -62,6 +84,20 @@ export const api = {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data),
+        });
+        return handleResponse(response);
+    },
+    updateTag: async (id: string, data: any) => {
+        const response = await fetch(`${API_URL}/tags/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        });
+        return handleResponse(response);
+    },
+    deleteTag: async (id: string) => {
+        const response = await fetch(`${API_URL}/tags/${id}`, {
+            method: 'DELETE',
         });
         return handleResponse(response);
     }

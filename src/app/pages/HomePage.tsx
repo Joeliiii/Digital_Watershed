@@ -1,15 +1,39 @@
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { FolderPlus, Database, Network, BarChart3 } from 'lucide-react';
-import { useWatershed } from '@/app/context/WatershedContext';
+import { FolderPlus, Database, Network, BarChart3, Tags } from 'lucide-react';
+import { api } from '../services/api';
 
 const HomePage = () => {
-  const { projects, media } = useWatershed();
+  const [projects, setProjects] = useState<any[]>([]);
+  const [media, setMedia] = useState<any[]>([]);
+  const [tags, setTags] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [projectsData, mediaData, tagsData] = await Promise.all([
+          api.getProjects(),
+          api.getItems(),
+          api.getTags(),
+        ]);
+        setProjects(projectsData);
+        setMedia(mediaData);
+        setTags(tagsData);
+      } catch (error) {
+        console.error('Failed to load homepage data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
 
   const stats = [
     { label: 'Total Projects', value: projects.length, icon: FolderPlus, color: 'bg-blue-100 text-blue-600' },
     { label: 'Media Items', value: media.length, icon: Database, color: 'bg-blue-100 text-blue-600' },
-    { label: 'Total Tags', value: new Set(media.flatMap(m => m.tags)).size, icon: BarChart3, color: 'bg-blue-100 text-blue-600' },
-    { label: 'Connections', value: media.reduce((acc, m) => acc + m.relatedMedia.length, 0), icon: Network, color: 'bg-blue-100 text-blue-600' },
+    { label: 'Total Tags', value: tags.length, icon: Tags, color: 'bg-blue-100 text-blue-600' },
+    { label: 'Connections', value: media.reduce((acc: number, m: any) => acc + (m.relatedMedia?.length || 0), 0), icon: Network, color: 'bg-blue-100 text-blue-600' },
   ];
 
   const quickActions = [
@@ -18,6 +42,8 @@ const HomePage = () => {
     { title: 'View Network', description: 'Explore connections between media items', link: '/network', icon: Network },
     { title: 'Dashboard', description: 'View analytics and insights', link: '/dashboard', icon: BarChart3 },
   ];
+
+  if (loading) return <div className="p-10 text-center">Loading...</div>;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white">
@@ -81,19 +107,19 @@ const HomePage = () => {
         <div>
           <h2 className="text-2xl font-bold text-blue-900 mb-6">Recent Projects</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {projects.slice(0, 4).map((project) => (
+            {projects.slice(0, 4).map((project: any) => (
               <div
-                key={project.id}
+                key={project._id}
                 className="bg-white rounded-xl p-6 shadow-sm border border-blue-100"
               >
                 <div className="flex items-start gap-4">
                   <div
-                    className="w-12 h-12 rounded-lg"
-                    style={{ backgroundColor: project.color }}
+                    className="w-12 h-12 rounded-lg flex-shrink-0"
+                    style={{ backgroundColor: project.color || '#3B82F6' }}
                   />
                   <div className="flex-1">
-                    <h3 className="text-lg font-semibold text-blue-900 mb-2">{project.name}</h3>
-                    <p className="text-gray-600 text-sm mb-3">{project.description}</p>
+                    <h3 className="text-lg font-semibold text-blue-900 mb-2">{project.title || project.name}</h3>
+                    <p className="text-gray-600 text-sm mb-3">{project.description || 'No description'}</p>
                     <div className="text-xs text-gray-500">
                       Created {new Date(project.createdAt).toLocaleDateString()}
                     </div>
@@ -101,6 +127,9 @@ const HomePage = () => {
                 </div>
               </div>
             ))}
+            {projects.length === 0 && (
+              <p className="text-gray-400 col-span-2 text-center py-8">No projects yet. Create one to get started!</p>
+            )}
           </div>
         </div>
       </div>

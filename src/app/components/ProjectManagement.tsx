@@ -1,19 +1,43 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Folder, Plus, Edit2, Trash2, Save, X, Search, Calendar, Palette, AlertCircle } from 'lucide-react';
-import { useWatershed } from '../context/WatershedContext';
+import { api } from '../services/api';
 import { Tag as TagIcon } from 'lucide-react';
 
 function ProjectManagement() {
-    const { projects, setProjects, media, tags } = useWatershed();
+    const [projects, setProjects] = useState<any[]>([]);
+    const [media, setMedia] = useState<any[]>([]);
+    const [tags, setTags] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
     const [isCreating, setIsCreating] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [formData, setFormData] = useState({
-        name: '',
+        title: '',
         description: '',
         color: '#3B82F6'
     });
     const [errors, setErrors] = useState<Record<string, string>>({});
+
+    // Fetch real data from API
+    useEffect(() => {
+        const fetchData = async () => {
+            try {
+                const [projectsData, mediaData, tagsData] = await Promise.all([
+                    api.getProjects(),
+                    api.getItems(),
+                    api.getTags(),
+                ]);
+                setProjects(projectsData);
+                setMedia(mediaData);
+                setTags(tagsData);
+            } catch (error) {
+                console.error('Failed to load data:', error);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchData();
+    }, []);
 
     // Color palette for projects
     const colorPalette = [
@@ -22,17 +46,20 @@ function ProjectManagement() {
     ];
 
     // Filter projects based on search
-    const filteredProjects = projects.filter(project => project.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        project.description.toLowerCase().includes(searchQuery.toLowerCase())
+    const filteredProjects = projects.filter((project: any) =>
+        (project.title || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (project.description || '').toLowerCase().includes(searchQuery.toLowerCase())
     );
 
     // Calculate project statistics
     const getProjectStats = (projectId: string) => {
-        const projectMedia = media.filter(m => m.projectId === projectId);
-        const storageUsed = projectMedia.reduce((acc, m) => acc + (m.fileSize || 0), 0);
+        const projectMedia = media.filter((m: any) =>
+            m.projectIds?.some((p: any) => (typeof p === 'string' ? p : p._id) === projectId)
+        );
+        const storageUsed = projectMedia.reduce((acc: number, m: any) => acc + (m.metadata?.size || 0), 0);
         return {
             mediaCount: projectMedia.length,
-            storageUsed: (storageUsed / (1024 * 1024)).toFixed(2) // Convert to MB
+            storageUsed: (storageUsed / (1024 * 1024)).toFixed(2)
         };
     };
 
@@ -40,12 +67,12 @@ function ProjectManagement() {
     const validateForm = () => {
         const newErrors: Record<string, string> = {};
 
-        if (!formData.name.trim()) {
-            newErrors.name = 'Project name is required';
-        } else if (formData.name.length < 3) {
-            newErrors.name = 'Project name must be at least 3 characters';
-        } else if (formData.name.length > 100) {
-            newErrors.name = 'Project name must be less than 100 characters';
+        if (!formData.title.trim()) {
+            newErrors.title = 'Project name is required';
+        } else if (formData.title.length < 3) {
+            newErrors.title = 'Project name must be at least 3 characters';
+        } else if (formData.title.length > 100) {
+            newErrors.title = 'Project name must be less than 100 characters';
         }
 
         if (formData.description.length > 500) {
@@ -57,59 +84,66 @@ function ProjectManagement() {
     };
 
     // Create new project
-    const handleCreate = () => {
+    const handleCreate = async () => {
         if (!validateForm()) return;
 
-        const newProject = {
-            id: `proj_${Date.now()}`,
-            name: formData.name.trim(),
-            description: formData.description.trim(),
-            color: formData.color,
-            createdAt: new Date().toISOString()
-        };
-
-        setProjects([...projects, newProject]);
-        resetForm();
+        try {
+            const created = await api.createProject({
+                title: formData.title.trim(),
+                description: formData.description.trim(),
+                color: formData.color,
+            });
+            setProjects([created, ...projects]);
+            resetForm();
+        } catch (error: any) {
+            setErrors({ title: error.message || 'Failed to create project' });
+        }
     };
 
     // Update existing project
-    const handleUpdate = (id: string) => {
+    const handleUpdate = async (id: string) => {
         if (!validateForm()) return;
 
-        setProjects(projects.map(project => project.id === id
-            ? {
-                ...project,
-                name: formData.name.trim(),
+        try {
+            const updated = await api.updateProject(id, {
+                title: formData.title.trim(),
                 description: formData.description.trim(),
                 color: formData.color
-            }
-            : project
-        ));
-        setEditingId(null);
-        resetForm();
+            });
+            setProjects(projects.map(p => p._id === id ? updated : p));
+            setEditingId(null);
+            resetForm();
+        } catch (error: any) {
+            setErrors({ title: error.message || 'Failed to update project' });
+        }
     };
 
     // Delete project
-    const handleDelete = (id: string) => {
-        const project = projects.find(p => p.id === id);
+    const handleDelete = async (id: string) => {
+        const project = projects.find((p: any) => p._id === id);
         const stats = getProjectStats(id);
 
         const confirmMessage = stats.mediaCount > 0
-            ? `This project contains ${stats.mediaCount} media item(s). Are you sure you want to delete "${project?.name}"? This action cannot be undone.`
-            : `Are you sure you want to delete "${project?.name}"? This action cannot be undone.`;
+            ? `This project contains ${stats.mediaCount} media item(s). Are you sure you want to delete "${project?.title}"? This action cannot be undone.`
+            : `Are you sure you want to delete "${project?.title}"? This action cannot be undone.`;
 
         if (window.confirm(confirmMessage)) {
-            setProjects(projects.filter(project => project.id !== id));
+            try {
+                await api.deleteProject(id);
+                setProjects(projects.filter((p: any) => p._id !== id));
+            } catch (error) {
+                console.error('Failed to delete project:', error);
+            }
         }
     };
 
     // Start editing a project
     const startEdit = (project: any) => {
-        setEditingId(project.id);
+        setEditingId(project._id);
         setFormData({
-            name: project.name,
-            description: project.description,
-            color: project.color
+            title: project.title || '',
+            description: project.description || '',
+            color: project.color || '#3B82F6'
         });
         setIsCreating(false);
         setErrors({});
@@ -117,17 +151,19 @@ function ProjectManagement() {
 
     // Reset form
     const resetForm = () => {
-        setFormData({ name: '', description: '', color: '#3B82F6' });
+        setFormData({ title: '', description: '', color: '#3B82F6' });
         setIsCreating(false);
         setEditingId(null);
         setErrors({});
     };
 
     // Calculate total storage
-    const totalStorage = projects.reduce((acc, proj) => {
-        const stats = getProjectStats(proj.id);
+    const totalStorage = projects.reduce((acc: number, proj: any) => {
+        const stats = getProjectStats(proj._id);
         return acc + parseFloat(stats.storageUsed);
     }, 0);
+
+    if (loading) return <div className="p-10 text-center">Loading...</div>;
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
@@ -148,7 +184,7 @@ function ProjectManagement() {
                                 setIsCreating(true);
                                 setEditingId(null);
                                 setErrors({});
-                            } }
+                            }}
                             className="flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5"
                         >
                             <Plus className="size-5" />
@@ -216,17 +252,17 @@ function ProjectManagement() {
                                 </label>
                                 <input
                                     type="text"
-                                    value={formData.name}
+                                    value={formData.title}
                                     onChange={(e) => {
-                                        setFormData({ ...formData, name: e.target.value });
-                                        if (errors.name) setErrors({ ...errors, name: '' });
-                                    } }
+                                        setFormData({ ...formData, title: e.target.value });
+                                        if (errors.title) setErrors({ ...errors, title: '' });
+                                    }}
                                     placeholder="e.g., Coastal Ecosystem Research"
-                                    className={`w-full px-4 py-3 rounded-lg border ${errors.name ? 'border-red-300' : 'border-slate-200'} focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent`} />
-                                {errors.name && (
+                                    className={`w-full px-4 py-3 rounded-lg border ${errors.title ? 'border-red-300' : 'border-slate-200'} focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent`} />
+                                {errors.title && (
                                     <div className="flex items-center gap-2 mt-2 text-red-600 text-sm">
                                         <AlertCircle className="size-4" />
-                                        <span>{errors.name}</span>
+                                        <span>{errors.title}</span>
                                     </div>
                                 )}
                             </div>
@@ -241,7 +277,7 @@ function ProjectManagement() {
                                     onChange={(e) => {
                                         setFormData({ ...formData, description: e.target.value });
                                         if (errors.description) setErrors({ ...errors, description: '' });
-                                    } }
+                                    }}
                                     placeholder="Describe the purpose and scope of this project..."
                                     rows={4}
                                     className={`w-full px-4 py-3 rounded-lg border ${errors.description ? 'border-red-300' : 'border-slate-200'} focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none`} />
@@ -269,8 +305,8 @@ function ProjectManagement() {
                                             key={color}
                                             onClick={() => setFormData({ ...formData, color })}
                                             className={`w-12 h-12 rounded-lg transition-all ${formData.color === color
-                                                    ? 'ring-4 ring-offset-2 ring-blue-400 scale-110'
-                                                    : 'hover:scale-105'}`}
+                                                ? 'ring-4 ring-offset-2 ring-blue-400 scale-110'
+                                                : 'hover:scale-105'}`}
                                             style={{ backgroundColor: color }}
                                             type="button" />
                                     ))}
@@ -281,7 +317,7 @@ function ProjectManagement() {
                             <div className="flex gap-3 pt-4">
                                 <button
                                     onClick={() => editingId ? handleUpdate(editingId) : handleCreate()}
-                                    disabled={!formData.name.trim()}
+                                    disabled={!formData.title.trim()}
                                     className="flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
                                 >
                                     <Save className="size-5" />
@@ -302,23 +338,33 @@ function ProjectManagement() {
 
                 {/* Projects Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {filteredProjects.map((project) => {
-                        const stats = getProjectStats(project.id);
+                    {filteredProjects.map((project: any) => {
+                        const stats = getProjectStats(project._id);
+                        // Find tags used in this project's media
+                        const projectMedia = media.filter((m: any) =>
+                            m.projectIds?.some((p: any) => (typeof p === 'string' ? p : p._id) === project._id)
+                        );
+                        const projectTagIds = new Set(
+                            projectMedia.flatMap((m: any) =>
+                                (m.tagIds || []).map((t: any) => typeof t === 'string' ? t : t?._id)
+                            ).filter(Boolean)
+                        );
+                        const projectTags = tags.filter((t: any) => projectTagIds.has(t._id));
                         return (
                             <div
-                                key={project.id}
+                                key={project._id}
                                 className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-md transition-all group"
                             >
                                 {/* Color Header */}
                                 <div
                                     className="h-3"
-                                    style={{ backgroundColor: project.color }} />
+                                    style={{ backgroundColor: project.color || '#3B82F6' }} />
 
                                 <div className="p-6">
                                     {/* Project Info */}
                                     <div className="mb-4">
                                         <h3 className="text-xl font-bold text-slate-900 mb-2">
-                                            {project.name}
+                                            {project.title}
                                         </h3>
                                         <p className="text-slate-600 text-sm line-clamp-2">
                                             {project.description || 'No description provided'}
@@ -337,16 +383,16 @@ function ProjectManagement() {
                                         </div>
                                     </div>
 
-                                    {/*Tags*/}
+                                    {/* Tags */}
                                     <div className="mt-4 flex flex-wrap gap-2">
-                                        {tags.map((tag) => (
-                                            <span 
-                                                key={tag.id}
+                                        {projectTags.slice(0, 5).map((tag: any) => (
+                                            <span
+                                                key={tag._id}
                                                 className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold"
-                                                style={{ 
-                                                    backgroundColor: `${tag.color}15`, 
-                                                    color: tag.color,
-                                                    border: `1px solid ${tag.color}30`
+                                                style={{
+                                                    backgroundColor: `${tag.color || '#3B82F6'}15`,
+                                                    color: tag.color || '#3B82F6',
+                                                    border: `1px solid ${tag.color || '#3B82F6'}30`
                                                 }}
                                             >
                                                 <TagIcon className="size-3" />
@@ -356,7 +402,7 @@ function ProjectManagement() {
                                     </div>
 
                                     {/* Metadata */}
-                                    <div className="text-xs text-slate-500 mb-4">
+                                    <div className="text-xs text-slate-500 mb-4 mt-3">
                                         Created {new Date(project.createdAt).toLocaleDateString('en-US', {
                                             year: 'numeric',
                                             month: 'short',
@@ -374,7 +420,7 @@ function ProjectManagement() {
                                             <span className="text-sm font-medium">Edit</span>
                                         </button>
                                         <button
-                                            onClick={() => handleDelete(project.id)}
+                                            onClick={() => handleDelete(project._id)}
                                             className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition-all"
                                         >
                                             <Trash2 className="size-4" />
