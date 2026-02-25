@@ -205,7 +205,7 @@ const updateItem = async (req, res) => {
             const updatedItem = await Item.findByIdAndUpdate(req.params.id, req.body, {
                 new: true,
                 runValidators: true
-            });
+            }).populate('tagIds').populate('projectIds');
             res.json(updatedItem);
         } else {
             res.status(404).json({ message: 'Item not found' });

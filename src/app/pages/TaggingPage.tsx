@@ -34,8 +34,10 @@ const TaggingPage = () => {
 
   const selectedMediaItem = media.find((m: any) => m._id === selectedMedia);
 
-  // Tag names already on the selected item
-  const selectedItemTagIds = selectedMediaItem?.tagIds?.map((t: any) => t._id) || [];
+  // Tag IDs already on the selected item — handle both populated objects and raw strings
+  const selectedItemTagIds = (selectedMediaItem?.tagIds || []).map((t: any) =>
+    typeof t === 'string' ? t : t?._id
+  ).filter(Boolean);
 
   // Filtered media for the sidebar
   const filteredMedia = media.filter((item: any) =>
@@ -187,8 +189,8 @@ const TaggingPage = () => {
                       key={item._id}
                       onClick={() => setSelectedMedia(item._id)}
                       className={`w-full text-left px-3 py-2.5 rounded-lg transition-colors flex items-center gap-3 ${selectedMedia === item._id
-                          ? 'bg-blue-100 text-blue-700 border border-blue-300'
-                          : 'bg-gray-50 text-gray-700 hover:bg-blue-50 border border-transparent'
+                        ? 'bg-blue-100 text-blue-700 border border-blue-300'
+                        : 'bg-gray-50 text-gray-700 hover:bg-blue-50 border border-transparent'
                         }`}
                     >
                       <div className={`p-1.5 rounded ${getTypeColor(mimeType)}`}>
@@ -226,22 +228,29 @@ const TaggingPage = () => {
                   <h3 className="text-sm font-medium text-blue-900 mb-3">Current Tags</h3>
                   <div className="flex flex-wrap gap-2">
                     {selectedMediaItem.tagIds && selectedMediaItem.tagIds.length > 0 ? (
-                      selectedMediaItem.tagIds.map((tag: any) => (
-                        <span
-                          key={tag._id}
-                          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-100 text-blue-700 text-sm"
-                        >
-                          <Tags className="size-3" />
-                          {tag.name}
-                          <button
-                            onClick={() => handleRemoveTag(tag._id)}
-                            className="hover:text-red-600 transition-colors"
-                            disabled={saving}
+                      selectedMediaItem.tagIds.map((tag: any) => {
+                        const tagId = typeof tag === 'string' ? tag : tag?._id;
+                        const tagName = typeof tag === 'string'
+                          ? (tags.find((t: any) => t._id === tag)?.name || tag)
+                          : (tag?.name || tagId);
+                        if (!tagId) return null;
+                        return (
+                          <span
+                            key={tagId}
+                            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-100 text-blue-700 text-sm"
                           >
-                            <X className="size-3" />
-                          </button>
-                        </span>
-                      ))
+                            <Tags className="size-3" />
+                            {tagName}
+                            <button
+                              onClick={() => handleRemoveTag(tagId)}
+                              className="hover:text-red-600 transition-colors"
+                              disabled={saving}
+                            >
+                              <X className="size-3" />
+                            </button>
+                          </span>
+                        );
+                      })
                     ) : (
                       <p className="text-gray-500 text-sm">No tags yet</p>
                     )}
@@ -284,8 +293,8 @@ const TaggingPage = () => {
                           onClick={() => !isAssigned && handleAssignTag(tag._id)}
                           disabled={isAssigned || saving}
                           className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${isAssigned
-                              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                              : 'bg-white border border-blue-200 text-blue-700 hover:bg-blue-50'
+                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                            : 'bg-white border border-blue-200 text-blue-700 hover:bg-blue-50'
                             }`}
                         >
                           {tag.name}

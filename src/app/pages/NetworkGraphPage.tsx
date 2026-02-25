@@ -1,32 +1,58 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useRef, useState, useEffect } from 'react';
 import ForceGraph2D from 'react-force-graph-2d';
-import { useWatershed } from '@/app/context/WatershedContext';
+import { api } from '../services/api';
 import { ZoomIn, ZoomOut, Maximize2 } from 'lucide-react';
+import { getMediaLabel } from '../utils/mediaUtils';
 
 const NetworkGraphPage = () => {
-  const { media, projects } = useWatershed();
-  const fgRef = useRef<any>();
+  const [media, setMedia] = useState<any[]>([]);
+  const [projects, setProjects] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const fgRef = useRef<any>(null);
   const [selectedNode, setSelectedNode] = useState<any>(null);
 
-  // Build graph data
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [mediaData, projectsData] = await Promise.all([
+          api.getItems(),
+          api.getProjects(),
+        ]);
+        setMedia(mediaData);
+        setProjects(projectsData);
+      } catch (error) {
+        console.error('Failed to load graph data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
+
+  // Build graph data from real API items
   const graphData = {
-    nodes: media.map(item => {
-      const project = projects.find(p => p.id === item.projectId);
+    nodes: media.map((item: any) => {
+      // Find first project linked to this item
+      const projectId = item.projectIds?.[0];
+      const project = projectId
+        ? projects.find((p: any) => p._id === (typeof projectId === 'string' ? projectId : projectId._id))
+        : null;
+      const tagNames = (item.tagIds || []).map((t: any) => typeof t === 'string' ? t : t?.name).filter(Boolean);
       return {
-        id: item.id,
+        id: item._id,
         name: item.title,
-        type: item.type,
-        tags: item.tags,
-        description: item.description,
+        type: item.mediaType,
+        tags: tagNames,
+        description: item.description || '',
         color: project?.color || '#3B82F6',
-        val: item.relatedMedia.length + 1,
+        val: (item.relatedMedia?.length || 0) + 1,
       };
     }),
-    links: media.flatMap(item =>
-      item.relatedMedia
-        .filter(relatedId => media.find(m => m.id === relatedId))
-        .map(relatedId => ({
-          source: item.id,
+    links: media.flatMap((item: any) =>
+      (item.relatedMedia || [])
+        .filter((relatedId: string) => media.find((m: any) => m._id === relatedId))
+        .map((relatedId: string) => ({
+          source: item._id,
           target: relatedId,
         }))
     ),
@@ -54,6 +80,8 @@ const NetworkGraphPage = () => {
     }
   };
 
+  if (loading) return <div className="p-10 text-center">Loading graph...</div>;
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white">
       <div className="container mx-auto px-6 py-12">
@@ -79,20 +107,20 @@ const NetworkGraphPage = () => {
                   onNodeClick={handleNodeClick}
                   nodeCanvasObject={(node: any, ctx, globalScale) => {
                     const label = node.name;
-                    const fontSize = 12/globalScale;
+                    const fontSize = 12 / globalScale;
                     ctx.font = `${fontSize}px Sans-Serif`;
-                    
+
                     // Draw node circle
                     ctx.beginPath();
                     ctx.arc(node.x, node.y, node.val * 2, 0, 2 * Math.PI, false);
                     ctx.fillStyle = node.color;
                     ctx.fill();
-                    
+
                     // Draw node border
                     ctx.strokeStyle = '#ffffff';
-                    ctx.lineWidth = 2/globalScale;
+                    ctx.lineWidth = 2 / globalScale;
                     ctx.stroke();
-                    
+
                     // Draw label
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
@@ -136,7 +164,7 @@ const NetworkGraphPage = () => {
             {selectedNode ? (
               <div className="bg-white rounded-xl p-6 shadow-sm border border-blue-100">
                 <h3 className="text-lg font-semibold text-blue-900 mb-4">Node Details</h3>
-                
+
                 <div className="mb-4">
                   <div
                     className="w-12 h-12 rounded-lg mb-3"
@@ -148,7 +176,7 @@ const NetworkGraphPage = () => {
 
                 <div className="mb-4">
                   <div className="text-xs font-medium text-gray-500 uppercase mb-2">Type</div>
-                  <div className="text-sm text-blue-700 capitalize">{selectedNode.type}</div>
+                  <div className="text-sm text-blue-700">{getMediaLabel(selectedNode.type)}</div>
                 </div>
 
                 <div className="mb-4">
@@ -159,14 +187,16 @@ const NetworkGraphPage = () => {
                 <div>
                   <div className="text-xs font-medium text-gray-500 uppercase mb-2">Tags</div>
                   <div className="flex flex-wrap gap-2">
-                    {selectedNode.tags.map((tag: string) => (
+                    {selectedNode.tags.length > 0 ? selectedNode.tags.map((tag: string) => (
                       <span
                         key={tag}
                         className="px-2 py-1 rounded text-xs bg-blue-100 text-blue-700"
                       >
                         {tag}
                       </span>
-                    ))}
+                    )) : (
+                      <span className="text-xs text-gray-400">No tags</span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -180,12 +210,14 @@ const NetworkGraphPage = () => {
             {/* Legend */}
             <div className="bg-white rounded-xl p-6 shadow-sm border border-blue-100 mt-4">
               <h3 className="text-lg font-semibold text-blue-900 mb-4">Legend</h3>
-              
+
               <div className="space-y-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-4 h-4 rounded-full bg-blue-600" />
-                  <span className="text-sm text-gray-700">Node</span>
-                </div>
+                {projects.map((p: any) => (
+                  <div key={p._id} className="flex items-center gap-3">
+                    <div className="w-4 h-4 rounded-full" style={{ backgroundColor: p.color || '#3B82F6' }} />
+                    <span className="text-sm text-gray-700">{p.title || p.name}</span>
+                  </div>
+                ))}
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-0.5 bg-blue-300" />
                   <span className="text-sm text-gray-700">Connection</span>
