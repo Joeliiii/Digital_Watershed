@@ -38,6 +38,7 @@ interface WatershedContextType {
   deleteMedia: (id: string) => void;
   tags: Tag[]; 
   setTags: React.Dispatch<React.SetStateAction<Tag[]>>;
+  setMedia: React.Dispatch<React.SetStateAction<MediaItem[]>>;
 }
 
 const WatershedContext = createContext<WatershedContextType | undefined>(undefined);
@@ -183,6 +184,7 @@ export const WatershedProvider = ({ children }: { children: ReactNode }) => {
         deleteMedia,
         tags,
         setTags,
+        setMedia,
       }}
     >
       {children}

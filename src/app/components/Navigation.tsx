@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Home, FolderPlus, Tags, LayoutDashboard, Database, Network } from 'lucide-react';
+import { Home, FolderPlus, Tags, Clock, LayoutDashboard, Database, Network } from 'lucide-react';
 
 const Navigation = () => {
   const location = useLocation();
@@ -10,6 +10,8 @@ const Navigation = () => {
     { path: '/tagging', label: 'Tagging', icon: Tags },
     { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { path: '/media', label: 'Media', icon: Database },
+    { path: '/batch-tagging', icon: Tags },      
+    { path: '/recently-viewed', icon: Clock },
     { path: '/network', label: 'Network Graph', icon: Network },
   ];
 

@@ -3,6 +3,12 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../services/api.ts';
 import { ArrowLeft, Save, Trash2, Edit } from 'lucide-react';
 
+declare global {
+  interface Window {
+    recordMediaView?: (mediaId: string) => void;
+  }
+}
+
 const MediaDetailPage = () => {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
@@ -28,6 +34,12 @@ const MediaDetailPage = () => {
             }
         };
         fetchItem();
+    }, [id]);
+
+    useEffect(() => {
+        if (id && window.recordMediaView) {
+            window.recordMediaView(id);
+        }
     }, [id]);
 
     const handleUpdate = async () => {
