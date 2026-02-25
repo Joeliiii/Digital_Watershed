@@ -21,6 +21,8 @@ export default function App() {
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/tagging" element={<TaggingPage />} />
             <Route path="/media" element={<MediaPage />} />
             <Route path="/media/create" element={<CreateMediaPage />} />
             <Route path="/media/:id" element={<MediaDetailPage />} />
