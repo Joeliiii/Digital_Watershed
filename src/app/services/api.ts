@@ -1,4 +1,4 @@
-const API_URL = 'http://localhost:5000/api';
+import { API_URL } from './constants';
 
 // Helper to handle responses
 const handleResponse = async (response: Response) => {

@@ -4,11 +4,12 @@ import { api } from '../services/api.ts';
 import { ArrowLeft, Save, Trash2, Edit, Download } from 'lucide-react';
 import MediaPreview from '../components/MediaPreview';
 import { getMediaLabel } from '../utils/mediaUtils';
+import { API_URL } from '../services/constants';
 
 declare global {
-  interface Window {
-    recordMediaView?: (mediaId: string) => void;
-  }
+    interface Window {
+        recordMediaView?: (mediaId: string) => void;
+    }
 }
 
 const MediaDetailPage = () => {
@@ -154,7 +155,7 @@ const MediaDetailPage = () => {
                                         <h3 className="text-sm font-semibold text-gray-500 uppercase">File</h3>
                                         {item.fileId ? (
                                             <a
-                                                href={`http://localhost:5000/api/items/${item._id}/file`}
+                                                href={`${API_URL}/items/${item._id}/file`}
                                                 download
                                                 className="mt-1 inline-flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
                                             >

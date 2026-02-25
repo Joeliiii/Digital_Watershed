@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import { Search, Filter, Tag, Plus } from 'lucide-react';
 import { getMediaIcon, getTypeColor, getMediaCategory, getMediaLabel } from '../utils/mediaUtils';
+import { API_URL } from '../services/constants';
 
 const MediaPage = () => {
   const navigate = useNavigate();
@@ -182,7 +183,7 @@ const MediaPage = () => {
                   {isImage && (
                     <div className="h-40 bg-gray-100 flex items-center justify-center overflow-hidden">
                       <img
-                        src={`http://localhost:5000/api/items/${item._id}/file`}
+                        src={`${API_URL}/items/${item._id}/file`}
                         alt={item.title}
                         className="w-full h-full object-cover"
                         loading="lazy"

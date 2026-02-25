@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Download, FileText, AlertCircle } from 'lucide-react';
 import { getMediaCategory, getMediaIcon, getMediaLabel, isPreviewable } from '../utils/mediaUtils';
 
-const API_URL = 'http://localhost:5000/api';
+import { API_URL } from '../services/constants';
 
 interface MediaPreviewProps {
     itemId: string;
