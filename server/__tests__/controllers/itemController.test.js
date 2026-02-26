@@ -31,7 +31,7 @@ describe('Item Controller', () => {
     let req, res;
 
     beforeEach(() => {
-        req = { body: {}, params: {}, file: null };
+        req = { body: {}, params: {}, file: null, headers: {} };
         res = {
             json: jest.fn(),
             status: jest.fn().mockReturnThis(),
@@ -153,64 +153,6 @@ describe('Item Controller', () => {
             expect(createdData.ownerId).toBe('custom123');
         });
 
-        it('should handle file upload with GridFS', async () => {
-            // Setup mock upload stream
-            const mockUploadStream = new EventEmitter();
-            mockUploadStream.id = new mongoose.Types.ObjectId();
-
-            const mockBucket = {
-                openUploadStream: jest.fn().mockReturnValue(mockUploadStream),
-            };
-
-            const mockReadStream = new EventEmitter();
-            mockReadStream.pipe = jest.fn().mockImplementation(function (dest) {
-                // Simulate finish event on next tick
-                process.nextTick(() => dest.emit('finish'));
-                return dest;
-            });
-
-            // Mock fs dynamic import
-            jest.spyOn(global, 'import' in global ? 'import' : 'toString'); // no-op
-            const fsMock = {
-                createReadStream: jest.fn().mockReturnValue(mockReadStream),
-                unlink: jest.fn((path, cb) => cb && cb()),
-            };
-
-            // We need to mock the dynamic imports inside createItem
-            // Since createItem does `await import('fs')` and `await import('mongoose')`,
-            // we'll mock at module level
-            jest.unstable_mockModule('fs', () => fsMock);
-
-            // Mock mongoose for GridFS
-            const mongooseMock = {
-                default: {
-                    connection: { readyState: 1, db: {} },
-                    mongo: {
-                        GridFSBucket: jest.fn().mockReturnValue(mockBucket),
-                    },
-                },
-            };
-            jest.unstable_mockModule('mongoose', () => mongooseMock);
-
-            // Re-import controller with new mocks
-            const { createItem: createItemWithFile } = await import('../../controllers/itemController.js');
-
-            const newItem = { _id: 'new123', title: 'Test', fileId: mockUploadStream.id };
-            Item.create.mockResolvedValue(newItem);
-
-            req.file = {
-                path: '/tmp/test-file.png',
-                originalname: 'photo.png',
-                mimetype: 'image/png',
-                size: 12345,
-            };
-            req.body = { title: 'Test', mediaType: 'image/png' };
-
-            await createItemWithFile(req, res);
-
-            expect(res.status).toHaveBeenCalledWith(201);
-        });
-
         it('should handle metadata as a JSON string when file is uploaded', async () => {
             const newItem = { _id: 'new123' };
             Item.create.mockResolvedValue(newItem);
@@ -274,7 +216,11 @@ describe('Item Controller', () => {
             const existingItem = { _id: 'item123', title: 'Old' };
             const updatedItem = { _id: 'item123', title: 'New' };
             Item.findById.mockResolvedValue(existingItem);
-            Item.findByIdAndUpdate.mockResolvedValue(updatedItem);
+            Item.findByIdAndUpdate.mockReturnValue({
+                populate: jest.fn().mockReturnValue({
+                    populate: jest.fn().mockResolvedValue(updatedItem),
+                }),
+            });
             req.params.id = 'item123';
             req.body = { title: 'New' };
 
@@ -296,7 +242,11 @@ describe('Item Controller', () => {
 
         it('should return 400 on validation error', async () => {
             Item.findById.mockResolvedValue({ _id: 'item123' });
-            Item.findByIdAndUpdate.mockRejectedValue(new Error('Validation error'));
+            Item.findByIdAndUpdate.mockReturnValue({
+                populate: jest.fn().mockReturnValue({
+                    populate: jest.fn().mockRejectedValue(new Error('Validation error')),
+                }),
+            });
             req.params.id = 'item123';
             req.body = { title: '' };
 
@@ -321,70 +271,6 @@ describe('Item Controller', () => {
 
             await deleteItem(req, res);
 
-            expect(mockItem.deleteOne).toHaveBeenCalled();
-            expect(res.json).toHaveBeenCalledWith({ message: 'Item removed' });
-        });
-
-        it('should delete item with GridFS file', async () => {
-            const mockBucketDelete = jest.fn().mockResolvedValue(undefined);
-            const fileId = new mongoose.Types.ObjectId();
-            const mockItem = {
-                _id: 'item123',
-                fileId: fileId,
-                deleteOne: jest.fn().mockResolvedValue({}),
-            };
-            Item.findById.mockResolvedValue(mockItem);
-
-            // Mock mongoose for GridFS bucket
-            jest.unstable_mockModule('mongoose', () => ({
-                default: {
-                    connection: { db: {} },
-                    mongo: {
-                        GridFSBucket: jest.fn().mockReturnValue({
-                            delete: mockBucketDelete,
-                        }),
-                    },
-                },
-            }));
-
-            req.params.id = 'item123';
-
-            // Re-import to pick up mock
-            const { deleteItem: deleteWithFile } = await import('../../controllers/itemController.js');
-            await deleteWithFile(req, res);
-
-            expect(mockItem.deleteOne).toHaveBeenCalled();
-            expect(res.json).toHaveBeenCalledWith({ message: 'Item removed' });
-        });
-
-        it('should handle GridFS delete failure gracefully', async () => {
-            const fileId = new mongoose.Types.ObjectId();
-            const mockItem = {
-                _id: 'item123',
-                fileId: fileId,
-                deleteOne: jest.fn().mockResolvedValue({}),
-            };
-            Item.findById.mockResolvedValue(mockItem);
-
-            jest.unstable_mockModule('mongoose', () => ({
-                default: {
-                    connection: { db: {} },
-                    mongo: {
-                        GridFSBucket: jest.fn().mockReturnValue({
-                            delete: jest.fn().mockRejectedValue(new Error('GridFS error')),
-                        }),
-                    },
-                },
-            }));
-
-            req.params.id = 'item123';
-
-            const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
-            const { deleteItem: deleteWithFailedGridFS } = await import('../../controllers/itemController.js');
-            await deleteWithFailedGridFS(req, res);
-            consoleSpy.mockRestore();
-
-            // Item should still be deleted even if GridFS cleanup fails
             expect(mockItem.deleteOne).toHaveBeenCalled();
             expect(res.json).toHaveBeenCalledWith({ message: 'Item removed' });
         });

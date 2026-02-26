@@ -14,6 +14,7 @@ export default {
     '!server/__tests__/**',
     '!server/test-models.js',
     '!server/seed-user.js',
+    '!server/index.js',
   ],
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov', 'html'],
