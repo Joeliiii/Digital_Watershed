@@ -45,6 +45,13 @@ export const api = {
         });
         return handleResponse(response);
     },
+    bulkCreateItems: async (data: FormData) => {
+        const response = await fetch(`${API_URL}/items/bulk`, {
+            method: 'POST',
+            body: data,
+        });
+        return handleResponse(response);
+    },
 
     // Projects
     getProjects: async () => {
@@ -73,6 +80,22 @@ export const api = {
         });
         return handleResponse(response);
     },
+    generateShareLink: async (projectId: string) => {
+        const response = await fetch(`${API_URL}/projects/${projectId}/share`, {
+            method: 'POST',
+        });
+        return handleResponse(response);
+    },
+    revokeShareLink: async (projectId: string) => {
+        const response = await fetch(`${API_URL}/projects/${projectId}/share`, {
+            method: 'DELETE',
+        });
+        return handleResponse(response);
+    },
+    getSharedProject: async (token: string) => {
+        const response = await fetch(`${API_URL}/projects/shared/${token}`);
+        return handleResponse(response);
+    },
 
     // Tags
     getTags: async () => {
@@ -99,6 +122,42 @@ export const api = {
         const response = await fetch(`${API_URL}/tags/${id}`, {
             method: 'DELETE',
         });
+        return handleResponse(response);
+    },
+
+    // Tag Relationships
+    getTagRelationships: async () => {
+        const response = await fetch(`${API_URL}/tag-relationships`);
+        return handleResponse(response);
+    },
+    getRelationshipsByTag: async (tagId: string) => {
+        const response = await fetch(`${API_URL}/tag-relationships/by-tag/${tagId}`);
+        return handleResponse(response);
+    },
+    createTagRelationship: async (data: { fromTagId: string; toTagId: string; relationshipType: string }) => {
+        const response = await fetch(`${API_URL}/tag-relationships`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        });
+        return handleResponse(response);
+    },
+    updateTagRelationship: async (id: string, data: { relationshipType: string }) => {
+        const response = await fetch(`${API_URL}/tag-relationships/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        });
+        return handleResponse(response);
+    },
+    deleteTagRelationship: async (id: string) => {
+        const response = await fetch(`${API_URL}/tag-relationships/${id}`, {
+            method: 'DELETE',
+        });
+        return handleResponse(response);
+    },
+    getTagRelationshipSuggestions: async () => {
+        const response = await fetch(`${API_URL}/tag-relationships/suggestions`);
         return handleResponse(response);
     }
 };

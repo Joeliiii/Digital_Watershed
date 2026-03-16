@@ -6,6 +6,7 @@ import authRoutes from './routes/authRoutes.js';
 import itemRoutes from './routes/itemRoutes.js';
 import projectRoutes from './routes/projectRoutes.js';
 import tagRoutes from './routes/tagRoutes.js';
+import tagRelationshipRoutes from './routes/tagRelationshipRoutes.js';
 
 dotenv.config();
 
@@ -32,6 +33,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/items', itemRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/tags', tagRoutes);
+app.use('/api/tag-relationships', tagRelationshipRoutes);
 
 app.get('/', (req, res) => {
     res.send('API is running...');
