@@ -120,6 +120,99 @@ const createItem = async (req, res) => {
     }
 };
 
+// @desc    Bulk create items from multiple files
+// @route   POST /api/items/bulk
+// @access  Private
+const bulkCreateItems = async (req, res) => {
+    try {
+        if (!req.files || req.files.length === 0) {
+            return res.status(400).json({ message: 'No files uploaded' });
+        }
+
+        const fs = (await import('fs'));
+        const mongoose = (await import('mongoose')).default;
+
+        if (mongoose.connection.readyState !== 1) {
+            throw new Error('Database connection is not open');
+        }
+
+        const bucket = new mongoose.mongo.GridFSBucket(mongoose.connection.db, {
+            bucketName: 'fs'
+        });
+
+        const results = [];
+        const errors = [];
+
+        for (const file of req.files) {
+            try {
+                const filename = `${Date.now()}-${file.originalname}`;
+                const uploadStream = bucket.openUploadStream(filename, {
+                    metadata: {
+                        originalname: file.originalname,
+                        mimetype: file.mimetype,
+                        size: file.size
+                    }
+                });
+                const fileId = uploadStream.id;
+
+                await new Promise((resolve, reject) => {
+                    fs.createReadStream(file.path)
+                        .pipe(uploadStream)
+                        .on('error', reject)
+                        .on('finish', resolve);
+                });
+
+                fs.unlink(file.path, (err) => {
+                    if (err) console.error('Failed to delete temp file:', file.path);
+                });
+
+                let projectIds = [];
+                if (req.body.projectIds) {
+                    projectIds = Array.isArray(req.body.projectIds)
+                        ? req.body.projectIds : [req.body.projectIds];
+                }
+                let tagIds = [];
+                if (req.body.tagIds) {
+                    tagIds = Array.isArray(req.body.tagIds)
+                        ? req.body.tagIds : [req.body.tagIds];
+                }
+
+                const itemData = {
+                    ownerId: req.body.ownerId || '6987c45da0cb4423e71e1ffd',
+                    title: file.originalname,
+                    description: req.body.description || '',
+                    mediaType: file.mimetype || 'application/octet-stream',
+                    storageType: 'gridfs',
+                    fileId,
+                    projectIds,
+                    tagIds,
+                    notes: req.body.notes || '',
+                    metadata: {
+                        originalName: file.originalname,
+                        mimetype: file.mimetype,
+                        size: file.size
+                    }
+                };
+
+                const newItem = await Item.create(itemData);
+                results.push(newItem);
+            } catch (fileError) {
+                errors.push({ file: file.originalname, error: fileError.message });
+                fs.unlink(file.path, () => {});
+            }
+        }
+
+        res.status(201).json({ created: results, errors });
+    } catch (error) {
+        if (req.files) {
+            const fs = (await import('fs'));
+            req.files.forEach(f => fs.unlink(f.path, () => {}));
+        }
+        console.error('Bulk Create Error:', error);
+        res.status(400).json({ message: error.message });
+    }
+};
+
 // @desc    Get item file (stream) — supports Range headers for video/audio seek
 // @route   GET /api/items/:id/file
 // @access  Private (or Public with token?)
@@ -250,6 +343,7 @@ export {
     getItems,
     getItemById,
     createItem,
+    bulkCreateItems,
     getItemFile,
     updateItem,
     deleteItem

@@ -5,6 +5,7 @@ import {
     getItems,
     getItemById,
     createItem,
+    bulkCreateItems,
     getItemFile,
     updateItem,
     deleteItem
@@ -14,6 +15,8 @@ router.route('/')
     .get(getItems)
     .post(upload.single('file'), createItem);
 
+// Bulk upload — must be before /:id
+router.post('/bulk', upload.array('files', 20), bulkCreateItems);
 router.route('/:id')
     .get(getItemById)
     .put(updateItem)

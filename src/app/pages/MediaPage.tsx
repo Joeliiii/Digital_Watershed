@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
-import { Search, Filter, Tag, Plus } from 'lucide-react';
+import { Search, Filter, Tag, Plus, Files } from 'lucide-react';
 import { getMediaIcon, getTypeColor, getMediaCategory, getMediaLabel } from '../utils/mediaUtils';
 import { API_URL } from '../services/constants';
 
@@ -89,13 +89,22 @@ const MediaPage = () => {
             <h1 className="text-4xl font-bold text-blue-900 mb-2">Media Library</h1>
             <p className="text-gray-600">Search and filter your research materials</p>
           </div>
-          <button
-            onClick={() => navigate('/media/create')}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
-          >
-            <Plus className="size-5" />
-            Add Media
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => navigate('/media/bulk-upload')}
+              className="flex items-center gap-2 px-4 py-2 bg-white text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors shadow-sm"
+            >
+              <Files className="size-5" />
+              Bulk Upload
+            </button>
+            <button
+              onClick={() => navigate('/media/create')}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
+            >
+              <Plus className="size-5" />
+              Add Media
+            </button>
+          </div>
         </div>
 
         {/* Search and Filters */}

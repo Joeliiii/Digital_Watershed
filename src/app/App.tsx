@@ -7,6 +7,7 @@ import TaggingPage from '@/app/pages/TaggingPage';
 import DashboardPage from '@/app/pages/DashboardPage';
 import MediaPage from '@/app/pages/MediaPage';
 import CreateMediaPage from '@/app/pages/CreateMediaPage';
+import BulkUploadPage from '@/app/pages/BulkUploadPage';
 import MediaDetailPage from '@/app/pages/MediaDetailPage';
 import NetworkGraphPage from '@/app/pages/NetworkGraphPage';
 
@@ -27,6 +28,7 @@ export default function App() {
             <Route path="/tagging" element={<TaggingPage />} />
             <Route path="/media" element={<MediaPage />} />
             <Route path="/media/create" element={<CreateMediaPage />} />
+            <Route path="/media/bulk-upload" element={<BulkUploadPage />} />
             <Route path="/media/:id" element={<MediaDetailPage />} />
             <Route path="/batch-tagging" element={<BatchTagging />} />
             <Route path="/recently-viewed" element={<RecentlyViewed />} />
