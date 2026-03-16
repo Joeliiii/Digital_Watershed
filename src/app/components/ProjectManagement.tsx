@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Folder, Plus, Edit2, Trash2, Save, X, Search, Calendar, Palette, AlertCircle } from 'lucide-react';
+import { Folder, Plus, Edit2, Trash2, Save, X, Search, Calendar, Palette, AlertCircle, Share2, Copy, Check, LinkIcon } from 'lucide-react';
 import { api } from '../services/api';
 import { Tag as TagIcon } from 'lucide-react';
 
@@ -17,6 +17,10 @@ function ProjectManagement() {
         color: '#3B82F6'
     });
     const [errors, setErrors] = useState<Record<string, string>>({});
+    const [sharingProjectId, setSharingProjectId] = useState<string | null>(null);
+    const [shareToken, setShareToken] = useState<string | null>(null);
+    const [shareLoading, setShareLoading] = useState(false);
+    const [copied, setCopied] = useState(false);
 
     // Fetch real data from API
     useEffect(() => {
@@ -162,6 +166,57 @@ function ProjectManagement() {
         const stats = getProjectStats(proj._id);
         return acc + parseFloat(stats.storageUsed);
     }, 0);
+
+    // Share handlers
+    const handleOpenShare = async (project: any) => {
+        setSharingProjectId(project._id);
+        setShareToken(project.sharedLinkToken || null);
+        setCopied(false);
+    };
+
+    const handleGenerateLink = async () => {
+        if (!sharingProjectId) return;
+        setShareLoading(true);
+        try {
+            const res = await api.generateShareLink(sharingProjectId);
+            setShareToken(res.token);
+            // Update local state
+            setProjects(projects.map(p =>
+                p._id === sharingProjectId ? { ...p, sharedLinkToken: res.token } : p
+            ));
+        } catch (err) {
+            console.error('Failed to generate share link:', err);
+        } finally {
+            setShareLoading(false);
+        }
+    };
+
+    const handleRevokeLink = async () => {
+        if (!sharingProjectId) return;
+        setShareLoading(true);
+        try {
+            await api.revokeShareLink(sharingProjectId);
+            setShareToken(null);
+            setProjects(projects.map(p =>
+                p._id === sharingProjectId ? { ...p, sharedLinkToken: null } : p
+            ));
+        } catch (err) {
+            console.error('Failed to revoke share link:', err);
+        } finally {
+            setShareLoading(false);
+        }
+    };
+
+    const getShareUrl = (token: string) => {
+        return `${window.location.origin}/shared/${token}`;
+    };
+
+    const handleCopyLink = () => {
+        if (!shareToken) return;
+        navigator.clipboard.writeText(getShareUrl(shareToken));
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+    };
 
     if (loading) return <div className="p-10 text-center">Loading...</div>;
 
@@ -420,6 +475,13 @@ function ProjectManagement() {
                                             <span className="text-sm font-medium">Edit</span>
                                         </button>
                                         <button
+                                            onClick={() => handleOpenShare(project)}
+                                            className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg border border-blue-200 text-blue-600 hover:bg-blue-50 transition-all"
+                                            title="Share project"
+                                        >
+                                            <Share2 className="size-4" />
+                                        </button>
+                                        <button
                                             onClick={() => handleDelete(project._id)}
                                             className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition-all"
                                         >
@@ -456,7 +518,72 @@ function ProjectManagement() {
                     </div>
                 )}
             </div>
-        </div>
+
+                {/* Share Modal */}
+                {sharingProjectId && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+                        <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 w-full max-w-md mx-4 overflow-hidden">
+                            <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between">
+                                <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                                    <Share2 className="size-5 text-blue-600" />
+                                    Share Project
+                                </h2>
+                                <button
+                                    onClick={() => { setSharingProjectId(null); setShareToken(null); }}
+                                    className="text-gray-400 hover:text-gray-600"
+                                >
+                                    <X className="size-5" />
+                                </button>
+                            </div>
+                            <div className="p-6 space-y-4">
+                                {shareToken ? (
+                                    <>
+                                        <p className="text-sm text-gray-600">
+                                            Anyone with this link can view the project and its media (read-only).
+                                        </p>
+                                        <div className="flex items-center gap-2">
+                                            <div className="flex-1 flex items-center gap-2 px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg">
+                                                <LinkIcon className="size-4 text-gray-400 shrink-0" />
+                                                <span className="text-sm text-gray-700 truncate">
+                                                    {getShareUrl(shareToken)}
+                                                </span>
+                                            </div>
+                                            <button
+                                                onClick={handleCopyLink}
+                                                className="flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium shrink-0"
+                                            >
+                                                {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
+                                                {copied ? 'Copied!' : 'Copy'}
+                                            </button>
+                                        </div>
+                                        <button
+                                            onClick={handleRevokeLink}
+                                            disabled={shareLoading}
+                                            className="w-full px-4 py-2 text-sm text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-50"
+                                        >
+                                            Revoke Link
+                                        </button>
+                                    </>
+                                ) : (
+                                    <>
+                                        <p className="text-sm text-gray-600">
+                                            Generate a shareable link to let anyone view this project and its media.
+                                        </p>
+                                        <button
+                                            onClick={handleGenerateLink}
+                                            disabled={shareLoading}
+                                            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50"
+                                        >
+                                            <Share2 className="size-4" />
+                                            {shareLoading ? 'Generating...' : 'Generate Share Link'}
+                                        </button>
+                                    </>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
     );
 }
 

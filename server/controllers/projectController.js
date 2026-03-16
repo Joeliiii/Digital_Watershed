@@ -1,4 +1,6 @@
+import crypto from 'crypto';
 import Project from '../models/Project.js';
+import Item from '../models/Item.js';
 
 // @desc    Get all projects (simple list)
 // @route   GET /api/projects
@@ -64,4 +66,71 @@ const deleteProject = async (req, res) => {
     }
 };
 
-export { getProjects, createProject, updateProject, deleteProject };
+// @desc    Generate a shareable link token for a project
+// @route   POST /api/projects/:id/share
+// @access  Private
+const generateShareLink = async (req, res) => {
+    try {
+        const project = await Project.findById(req.params.id);
+        if (!project) {
+            return res.status(404).json({ message: 'Project not found' });
+        }
+
+        const token = crypto.randomUUID();
+        project.sharedLinkToken = token;
+        await project.save();
+
+        res.json({ token, sharedLinkToken: token });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// @desc    Revoke a shareable link token
+// @route   DELETE /api/projects/:id/share
+// @access  Private
+const revokeShareLink = async (req, res) => {
+    try {
+        const project = await Project.findById(req.params.id);
+        if (!project) {
+            return res.status(404).json({ message: 'Project not found' });
+        }
+
+        project.sharedLinkToken = null;
+        await project.save();
+
+        res.json({ message: 'Share link revoked' });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// @desc    Get a shared project by token (public)
+// @route   GET /api/projects/shared/:token
+// @access  Public
+const getSharedProject = async (req, res) => {
+    try {
+        const project = await Project.findOne({ sharedLinkToken: req.params.token });
+        if (!project) {
+            return res.status(404).json({ message: 'Shared project not found or link has been revoked' });
+        }
+
+        const items = await Item.find({ projectIds: project._id })
+            .sort({ createdAt: -1 })
+            .populate('tagIds', 'name color');
+
+        res.json({ project, items });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+export {
+    getProjects,
+    createProject,
+    updateProject,
+    deleteProject,
+    generateShareLink,
+    revokeShareLink,
+    getSharedProject
+};

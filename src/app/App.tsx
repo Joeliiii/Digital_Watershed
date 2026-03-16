@@ -10,6 +10,7 @@ import CreateMediaPage from '@/app/pages/CreateMediaPage';
 import BulkUploadPage from '@/app/pages/BulkUploadPage';
 import MediaDetailPage from '@/app/pages/MediaDetailPage';
 import NetworkGraphPage from '@/app/pages/NetworkGraphPage';
+import SharedProjectPage from '@/app/pages/SharedProjectPage';
 
 import LoginPage from '@/app/pages/LoginPage';
 import BatchTagging from './components/BatchTagging';
@@ -34,6 +35,7 @@ export default function App() {
             <Route path="/recently-viewed" element={<RecentlyViewed />} />
             <Route path="/create-project" element={<CreateProjectPage />} />
             <Route path="/network" element={<NetworkGraphPage />} />
+            <Route path="/shared/:token" element={<SharedProjectPage />} />
           </Routes>
         </div>
       </Router>
