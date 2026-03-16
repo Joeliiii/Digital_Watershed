@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from '../services/api';
-import { Tags, Plus, X, Search, Loader2 } from 'lucide-react';
+import { Tags, Plus, X, Search, Loader2, Link2, Lightbulb, ArrowRight, Trash2, HelpCircle, ChevronDown } from 'lucide-react';
 import { getMediaIcon, getTypeColor, getMediaCategory, getMediaLabel } from '../utils/mediaUtils';
 
 const TaggingPage = () => {
@@ -12,6 +12,30 @@ const TaggingPage = () => {
   const [newGlobalTag, setNewGlobalTag] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [saving, setSaving] = useState(false);
+
+  // Tag relationship state
+  const [relationships, setRelationships] = useState<any[]>([]);
+  const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [relFrom, setRelFrom] = useState('');
+  const [relTo, setRelTo] = useState('');
+  const [relType, setRelType] = useState('related');
+  const [relLoading, setRelLoading] = useState(false);
+  const [showAdvancedTypes, setShowAdvancedTypes] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(true);
+
+  const relationshipTypes = [
+    { value: 'related', label: 'Related', color: 'bg-blue-100 text-blue-700', description: 'These tags are about similar topics', advanced: false },
+    { value: 'parent', label: 'Parent → Child', color: 'bg-purple-100 text-purple-700', description: 'One tag is a broader category of the other (e.g. Biology → Marine Biology)', advanced: false },
+    { value: 'depends_on', label: 'Depends On', color: 'bg-amber-100 text-amber-700', description: 'Understanding one topic requires knowledge of the other', advanced: true },
+    { value: 'derived_from', label: 'Derived From', color: 'bg-green-100 text-green-700', description: 'One concept was built on or grew out of the other', advanced: true },
+    { value: 'contradicts', label: 'Contradicts', color: 'bg-red-100 text-red-700', description: 'These represent conflicting ideas or competing approaches', advanced: true },
+  ];
+
+  const visibleTypes = showAdvancedTypes
+    ? relationshipTypes
+    : relationshipTypes.filter(rt => !rt.advanced);
+
+  const selectedTypeInfo = relationshipTypes.find(rt => rt.value === relType);
 
   // Fetch real data from API
   useEffect(() => {
@@ -30,6 +54,23 @@ const TaggingPage = () => {
       }
     };
     fetchData();
+  }, []);
+
+  // Load relationships and suggestions
+  useEffect(() => {
+    const fetchRelationships = async () => {
+      try {
+        const [rels, suggs] = await Promise.all([
+          api.getTagRelationships(),
+          api.getTagRelationshipSuggestions(),
+        ]);
+        setRelationships(rels);
+        setSuggestions(suggs);
+      } catch (error) {
+        console.error('Failed to load relationships:', error);
+      }
+    };
+    fetchRelationships();
   }, []);
 
   const selectedMediaItem = media.find((m: any) => m._id === selectedMedia);
@@ -312,6 +353,212 @@ const TaggingPage = () => {
                 <p className="text-gray-600">Select a media item from the list to manage its tags</p>
               </div>
             )}
+          </div>
+        </div>
+
+        {/* Tag Relationships Section */}
+        <div className="mt-10">
+          <h2 className="text-2xl font-bold text-blue-900 mb-2">Tag Relationships</h2>
+          <p className="text-gray-600 mb-6">Connect tags to build a knowledge web that spans across projects</p>
+
+          {/* Onboarding Card */}
+          {showOnboarding && (
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-5 border border-blue-200 mb-6 relative">
+              <button
+                onClick={() => setShowOnboarding(false)}
+                className="absolute top-3 right-3 text-blue-300 hover:text-blue-500 transition-colors"
+              >
+                <X className="size-4" />
+              </button>
+              <div className="flex items-start gap-3">
+                <Link2 className="size-6 text-blue-500 mt-0.5 shrink-0" />
+                <div>
+                  <h3 className="font-semibold text-blue-900 mb-1">How Tag Relationships Work</h3>
+                  <p className="text-sm text-blue-700 leading-relaxed">
+                    Tag relationships let you map how your ideas connect across your entire workspace — not just within a single project.
+                    Start by linking tags that feel related. <strong>"Related" is always a safe default</strong> if you're not sure which type to pick.
+                    The more connections you make, the richer your knowledge web becomes.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Create Relationship */}
+            <div className="bg-white rounded-xl p-6 shadow-sm border border-blue-100">
+              <h3 className="text-sm font-semibold text-blue-900 mb-4 flex items-center gap-2">
+                <Link2 className="size-4" />
+                Create Relationship
+              </h3>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">From Tag</label>
+                  <select
+                    value={relFrom}
+                    onChange={(e) => setRelFrom(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                  >
+                    <option value="">Select a tag...</option>
+                    {tags.map((t: any) => (
+                      <option key={t._id} value={t._id} disabled={t._id === relTo}>{t.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Relationship Type</label>
+                  <select
+                    value={relType}
+                    onChange={(e) => setRelType(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                  >
+                    {visibleTypes.map(rt => (
+                      <option key={rt.value} value={rt.value}>{rt.label}</option>
+                    ))}
+                  </select>
+                  {selectedTypeInfo && (
+                    <p className="mt-1.5 text-[11px] text-gray-500 flex items-start gap-1">
+                      <HelpCircle className="size-3 mt-0.5 shrink-0 text-gray-400" />
+                      {selectedTypeInfo.description}
+                    </p>
+                  )}
+                  {!showAdvancedTypes && (
+                    <button
+                      onClick={() => setShowAdvancedTypes(true)}
+                      className="mt-2 text-[11px] text-blue-500 hover:text-blue-700 flex items-center gap-1 transition-colors"
+                    >
+                      <ChevronDown className="size-3" />
+                      Show advanced types
+                    </button>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">To Tag</label>
+                  <select
+                    value={relTo}
+                    onChange={(e) => setRelTo(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                  >
+                    <option value="">Select a tag...</option>
+                    {tags.map((t: any) => (
+                      <option key={t._id} value={t._id} disabled={t._id === relFrom}>{t.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <button
+                  onClick={async () => {
+                    if (!relFrom || !relTo) return;
+                    setRelLoading(true);
+                    try {
+                      const created = await api.createTagRelationship({ fromTagId: relFrom, toTagId: relTo, relationshipType: relType });
+                      setRelationships(prev => [created, ...prev]);
+                      // Remove from suggestions if present
+                      setSuggestions(prev => prev.filter(s =>
+                        !([s.fromTag._id, s.toTag._id].includes(relFrom) && [s.fromTag._id, s.toTag._id].includes(relTo))
+                      ));
+                      setRelFrom('');
+                      setRelTo('');
+                    } catch (err: any) {
+                      alert(err.message || 'Failed to create relationship');
+                    } finally {
+                      setRelLoading(false);
+                    }
+                  }}
+                  disabled={!relFrom || !relTo || relFrom === relTo || relLoading}
+                  className="w-full px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  <Link2 className="size-4" />
+                  {relLoading ? 'Creating...' : 'Create Link'}
+                </button>
+              </div>
+            </div>
+
+            {/* Existing Relationships */}
+            <div className="bg-white rounded-xl p-6 shadow-sm border border-blue-100">
+              <h3 className="text-sm font-semibold text-blue-900 mb-4">
+                Existing Relationships ({relationships.length})
+              </h3>
+              <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                {relationships.length > 0 ? relationships.map((rel: any) => {
+                  const typeInfo = relationshipTypes.find(rt => rt.value === rel.relationshipType) || { label: rel.relationshipType, color: 'bg-gray-100 text-gray-700' };
+                  return (
+                    <div key={rel._id} className="flex items-center gap-2 p-2.5 rounded-lg bg-gray-50 border border-gray-100 group">
+                      <span className="text-sm font-medium text-gray-800 truncate">{rel.fromTagId?.name || '?'}</span>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <ArrowRight className="size-3 text-gray-400" />
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide ${typeInfo.color}`}>
+                          {typeInfo.label}
+                        </span>
+                        <ArrowRight className="size-3 text-gray-400" />
+                      </div>
+                      <span className="text-sm font-medium text-gray-800 truncate">{rel.toTagId?.name || '?'}</span>
+                      <button
+                        onClick={async () => {
+                          try {
+                            await api.deleteTagRelationship(rel._id);
+                            setRelationships(prev => prev.filter(r => r._id !== rel._id));
+                          } catch (err) {
+                            console.error('Failed to delete:', err);
+                          }
+                        }}
+                        className="ml-auto text-gray-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
+                        title="Remove relationship"
+                      >
+                        <Trash2 className="size-3.5" />
+                      </button>
+                    </div>
+                  );
+                }) : (
+                  <p className="text-sm text-gray-400">No relationships created yet</p>
+                )}
+              </div>
+            </div>
+
+            {/* Suggestions */}
+            <div className="bg-white rounded-xl p-6 shadow-sm border border-amber-100">
+              <h3 className="text-sm font-semibold text-amber-800 mb-1 flex items-center gap-2">
+                <Lightbulb className="size-4 text-amber-500" />
+                Suggested Connections
+              </h3>
+              <p className="text-xs text-gray-500 mb-4">Tags that frequently appear together on the same items</p>
+              <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                {suggestions.length > 0 ? suggestions.map((s: any, i: number) => (
+                  <div key={i} className="flex items-center gap-2 p-2.5 rounded-lg bg-amber-50/50 border border-amber-100">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 text-sm">
+                        <span className="font-medium text-gray-800 truncate">{s.fromTag?.name}</span>
+                        <span className="text-gray-400">&</span>
+                        <span className="font-medium text-gray-800 truncate">{s.toTag?.name}</span>
+                      </div>
+                      <span className="text-[10px] text-gray-500">{s.coOccurrences} shared items</span>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        setRelLoading(true);
+                        try {
+                          const created = await api.createTagRelationship({
+                            fromTagId: s.fromTag._id,
+                            toTagId: s.toTag._id,
+                            relationshipType: 'related'
+                          });
+                          setRelationships(prev => [created, ...prev]);
+                          setSuggestions(prev => prev.filter((_, idx) => idx !== i));
+                        } catch (err: any) {
+                          console.error('Failed to link:', err);
+                        } finally {
+                          setRelLoading(false);
+                        }
+                      }}
+                      className="px-3 py-1.5 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors text-xs font-medium shrink-0"
+                    >
+                      Link
+                    </button>
+                  </div>
+                )) : (
+                  <p className="text-sm text-gray-400">No suggestions yet — tag more items to generate connections</p>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </div>
