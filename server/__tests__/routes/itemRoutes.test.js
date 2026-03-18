@@ -6,6 +6,7 @@ jest.mock('../../controllers/itemController.js', () => ({
     getItems: jest.fn((req, res) => res.json({ action: 'getItems' })),
     getItemById: jest.fn((req, res) => res.json({ action: 'getItemById', id: req.params.id })),
     createItem: jest.fn((req, res) => res.status(201).json({ action: 'createItem' })),
+    bulkCreateItems: jest.fn((req, res) => res.status(201).json({ action: 'bulkCreateItems' })),
     getItemFile: jest.fn((req, res) => res.json({ action: 'getItemFile', id: req.params.id })),
     updateItem: jest.fn((req, res) => res.json({ action: 'updateItem', id: req.params.id })),
     deleteItem: jest.fn((req, res) => res.json({ action: 'deleteItem', id: req.params.id })),
@@ -15,6 +16,7 @@ jest.mock('../../middleware/upload.js', () => ({
     __esModule: true,
     default: {
         single: () => (req, res, next) => next(),
+        array: () => (req, res, next) => next(),
     },
 }));
 
@@ -40,6 +42,14 @@ describe('Item Routes', () => {
             .send({ title: 'Test' });
         expect(res.status).toBe(201);
         expect(res.body.action).toBe('createItem');
+    });
+
+    it('POST /api/items/bulk should call bulkCreateItems', async () => {
+        const res = await request(app)
+            .post('/api/items/bulk')
+            .send({});
+        expect(res.status).toBe(201);
+        expect(res.body.action).toBe('bulkCreateItems');
     });
 
     it('GET /api/items/:id should call getItemById', async () => {
@@ -69,3 +79,4 @@ describe('Item Routes', () => {
         expect(res.body.action).toBe('getItemFile');
     });
 });
+
