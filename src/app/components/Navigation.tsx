@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Home, FolderPlus, Tags, Clock, LayoutDashboard, Database, Network } from 'lucide-react';
+import { Home, FolderPlus, Tags, Clock, LayoutDashboard, Database, Network, Calendar } from 'lucide-react';
 
 const Navigation = () => {
   const location = useLocation();
@@ -13,6 +13,7 @@ const Navigation = () => {
     { path: '/batch-tagging', icon: Tags },      
     { path: '/recently-viewed', icon: Clock },
     { path: '/network', label: 'Network Graph', icon: Network },
+    { path: '/timeline', label: 'Timeline', icon: Calendar },
   ];
 
   return (
