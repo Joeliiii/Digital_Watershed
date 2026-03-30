@@ -1,6 +1,8 @@
 jest.mock('../../models/Project.js', () => {
     const mockModel = {
         find: jest.fn(),
+        findOne: jest.fn(),
+        findById: jest.fn(),
         create: jest.fn(),
         findByIdAndUpdate: jest.fn(),
         findByIdAndDelete: jest.fn(),
@@ -8,10 +10,19 @@ jest.mock('../../models/Project.js', () => {
     return { __esModule: true, default: mockModel };
 });
 
+jest.mock('../../models/Item.js', () => {
+    const mockModel = {
+        find: jest.fn(),
+    };
+    return { __esModule: true, default: mockModel };
+});
+
 import Project from '../../models/Project.js';
+import Item from '../../models/Item.js';
 
 describe('Project Controller', () => {
-    let getProjects, createProject, updateProject, deleteProject;
+    let getProjects, createProject, updateProject, deleteProject,
+        generateShareLink, revokeShareLink, getSharedProject;
 
     beforeAll(async () => {
         const mod = await import('../../controllers/projectController.js');
@@ -19,6 +30,9 @@ describe('Project Controller', () => {
         createProject = mod.createProject;
         updateProject = mod.updateProject;
         deleteProject = mod.deleteProject;
+        generateShareLink = mod.generateShareLink;
+        revokeShareLink = mod.revokeShareLink;
+        getSharedProject = mod.getSharedProject;
     });
 
     let req, res;
@@ -188,6 +202,127 @@ describe('Project Controller', () => {
             req.params.id = 'proj1';
 
             await deleteProject(req, res);
+
+            expect(res.status).toHaveBeenCalledWith(500);
+            expect(res.status().json).toHaveBeenCalledWith({ message: 'DB error' });
+        });
+    });
+
+    // ─── generateShareLink ───────────────────────────────────────
+    describe('generateShareLink', () => {
+        it('should generate a share token and return it', async () => {
+            const mockProject = {
+                _id: 'proj1',
+                sharedLinkToken: null,
+                save: jest.fn().mockResolvedValue(true),
+            };
+            Project.findById.mockResolvedValue(mockProject);
+            req.params.id = 'proj1';
+
+            await generateShareLink(req, res);
+
+            expect(mockProject.save).toHaveBeenCalled();
+            expect(mockProject.sharedLinkToken).toBeTruthy();
+            expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+                token: expect.any(String),
+                sharedLinkToken: expect.any(String),
+            }));
+        });
+
+        it('should return 404 when project not found', async () => {
+            Project.findById.mockResolvedValue(null);
+            req.params.id = 'nonexistent';
+
+            await generateShareLink(req, res);
+
+            expect(res.status).toHaveBeenCalledWith(404);
+            expect(res.status().json).toHaveBeenCalledWith({ message: 'Project not found' });
+        });
+
+        it('should return 500 on error', async () => {
+            Project.findById.mockRejectedValue(new Error('DB error'));
+            req.params.id = 'proj1';
+
+            await generateShareLink(req, res);
+
+            expect(res.status).toHaveBeenCalledWith(500);
+            expect(res.status().json).toHaveBeenCalledWith({ message: 'DB error' });
+        });
+    });
+
+    // ─── revokeShareLink ─────────────────────────────────────────
+    describe('revokeShareLink', () => {
+        it('should revoke the share token', async () => {
+            const mockProject = {
+                _id: 'proj1',
+                sharedLinkToken: 'old-token',
+                save: jest.fn().mockResolvedValue(true),
+            };
+            Project.findById.mockResolvedValue(mockProject);
+            req.params.id = 'proj1';
+
+            await revokeShareLink(req, res);
+
+            expect(mockProject.sharedLinkToken).toBeNull();
+            expect(mockProject.save).toHaveBeenCalled();
+            expect(res.json).toHaveBeenCalledWith({ message: 'Share link revoked' });
+        });
+
+        it('should return 404 when project not found', async () => {
+            Project.findById.mockResolvedValue(null);
+            req.params.id = 'nonexistent';
+
+            await revokeShareLink(req, res);
+
+            expect(res.status).toHaveBeenCalledWith(404);
+            expect(res.status().json).toHaveBeenCalledWith({ message: 'Project not found' });
+        });
+
+        it('should return 500 on error', async () => {
+            Project.findById.mockRejectedValue(new Error('DB error'));
+            req.params.id = 'proj1';
+
+            await revokeShareLink(req, res);
+
+            expect(res.status).toHaveBeenCalledWith(500);
+            expect(res.status().json).toHaveBeenCalledWith({ message: 'DB error' });
+        });
+    });
+
+    // ─── getSharedProject ────────────────────────────────────────
+    describe('getSharedProject', () => {
+        it('should return the shared project and its items', async () => {
+            const mockProject = { _id: 'proj1', title: 'Shared', sharedLinkToken: 'tok' };
+            const mockItems = [{ _id: 'item1', title: 'Item' }];
+            Project.findOne.mockResolvedValue(mockProject);
+            const populateMock = jest.fn().mockResolvedValue(mockItems);
+            const sortMock = jest.fn().mockReturnValue({ populate: populateMock });
+            Item.find.mockReturnValue({ sort: sortMock });
+            req.params.token = 'tok';
+
+            await getSharedProject(req, res);
+
+            expect(Project.findOne).toHaveBeenCalledWith({ sharedLinkToken: 'tok' });
+            expect(res.json).toHaveBeenCalledWith({ project: mockProject, items: mockItems });
+        });
+
+        it('should return 404 when shared project not found', async () => {
+            Project.findOne.mockResolvedValue(null);
+            req.params.token = 'bad-token';
+
+            await getSharedProject(req, res);
+
+            expect(res.status).toHaveBeenCalledWith(404);
+            expect(res.status().json).toHaveBeenCalledWith({
+                message: 'Shared project not found or link has been revoked'
+            });
+        });
+
+        it('should return 500 on error', async () => {
+            Project.findOne.mockRejectedValue(new Error('DB error'));
+            req.params.token = 'tok';
+
+            await getSharedProject(req, res);
 
             expect(res.status).toHaveBeenCalledWith(500);
             expect(res.status().json).toHaveBeenCalledWith({ message: 'DB error' });

@@ -1,43 +1,60 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { ResponsiveGridLayout, useContainerWidth } from 'react-grid-layout';
+import 'react-grid-layout/css/styles.css';
 import { api } from '../services/api';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { getMediaCategory, getMediaIcon, getMediaLabel } from '../utils/mediaUtils';
+import {
+  Edit3,
+  Plus,
+  RotateCcw,
+  ChevronDown,
+  Save,
+  Bookmark,
+} from 'lucide-react';
 
-const CATEGORY_COLORS: Record<string, string> = {
-  document: '#3B82F6',
-  image: '#8B5CF6',
-  video: '#EF4444',
-  audio: '#F59E0B',
-  code: '#10B981',
-  other: '#6B7280',
-};
+import StatsCardWidget from '../components/dashboard/StatsCardWidget';
+import PieChartWidget from '../components/dashboard/PieChartWidget';
+import BarChartWidget from '../components/dashboard/BarChartWidget';
+import TopTagsWidget from '../components/dashboard/TopTagsWidget';
+import MediaBreakdownWidget from '../components/dashboard/MediaBreakdownWidget';
+import RecentActivityWidget from '../components/dashboard/RecentActivityWidget';
+import MiniGraphWidget from '../components/dashboard/MiniGraphWidget';
+import TagRelationshipWidget from '../components/dashboard/TagRelationshipWidget';
+import QuickActionsWidget from '../components/dashboard/QuickActionsWidget';
+import WidgetPalette from '../components/dashboard/WidgetPalette';
 
-const CATEGORY_LABELS: Record<string, string> = {
-  document: 'Documents',
-  image: 'Images',
-  video: 'Videos',
-  audio: 'Audio',
-  code: 'Code',
-  other: 'Other',
-};
+import {
+  type WidgetConfig,
+  type WidgetType,
+  DASHBOARD_PRESETS,
+  loadDashboardLayout,
+  saveDashboardLayout,
+  generateWidgetId,
+  getRegistryEntry,
+} from '../utils/dashboardDefaults';
+
+type BreakpointKey = 'lg' | 'md' | 'sm';
 
 const DashboardPage = () => {
+  // ─── Data fetching ───────────────────────────────────────────
   const [media, setMedia] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
   const [tags, setTags] = useState<any[]>([]);
+  const [relationships, setRelationships] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [mediaData, projectsData, tagsData] = await Promise.all([
+        const [mediaData, projectsData, tagsData, relsData] = await Promise.all([
           api.getItems(),
           api.getProjects(),
           api.getTags(),
+          api.getTagRelationships(),
         ]);
         setMedia(mediaData);
         setProjects(projectsData);
         setTags(tagsData);
+        setRelationships(relsData);
       } catch (error) {
         console.error('Failed to load dashboard data:', error);
       } finally {
@@ -47,202 +64,372 @@ const DashboardPage = () => {
     fetchData();
   }, []);
 
-  // Media type distribution (by MIME category)
-  const mediaTypeData = useMemo(() => {
-    const counts: Record<string, number> = {};
-    media.forEach(item => {
-      const cat = getMediaCategory(item.metadata?.mimetype || item.mediaType);
-      counts[cat] = (counts[cat] || 0) + 1;
+  // ─── Computed stats ──────────────────────────────────────────
+  const stats = useMemo(
+    () => ({
+      totalProjects: projects.length,
+      totalMedia: media.length,
+      totalTags: tags.length,
+      totalConnections: media.reduce(
+        (acc: number, m: any) => acc + (m.relatedMedia?.length || 0),
+        0
+      ),
+      avgTagsPerMedia:
+        media.length > 0
+          ? (
+              media.reduce((acc, m) => acc + (m.tagIds?.length || 0), 0) / media.length
+            ).toFixed(1)
+          : '0',
+    }),
+    [media, projects, tags]
+  );
+
+  // ─── Dashboard state ────────────────────────────────────────
+  const [widgets, setWidgets] = useState<WidgetConfig[]>([]);
+  const [activePresetId, setActivePresetId] = useState<string | null>('overview');
+  const [isEditing, setIsEditing] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [presetMenuOpen, setPresetMenuOpen] = useState(false);
+
+  // Container width for responsive grid
+  const { width: containerWidth, containerRef, mounted } = useContainerWidth({
+    initialWidth: 1200,
+  });
+
+  // Load saved or default layout
+  useEffect(() => {
+    const saved = loadDashboardLayout();
+    if (saved) {
+      setWidgets(saved.widgets);
+      setActivePresetId(saved.presetId);
+    } else {
+      const defaultPreset = DASHBOARD_PRESETS.find((p) => p.id === 'overview');
+      if (defaultPreset) {
+        setWidgets(defaultPreset.widgets);
+        setActivePresetId(defaultPreset.id);
+      }
+    }
+  }, []);
+
+  // ─── Layout actions ──────────────────────────────────────────
+  const handleLayoutChange = useCallback(
+    (layout: any[]) => {
+      if (!isEditing) return;
+      setWidgets((prev) =>
+        prev.map((widget) => {
+          const layoutItem = layout.find((l: any) => l.i === widget.i);
+          if (layoutItem) {
+            return {
+              ...widget,
+              x: layoutItem.x,
+              y: layoutItem.y,
+              w: layoutItem.w,
+              h: layoutItem.h,
+            };
+          }
+          return widget;
+        })
+      );
+    },
+    [isEditing]
+  );
+
+  const handleSave = () => {
+    saveDashboardLayout({
+      presetId: activePresetId,
+      widgets,
+      savedAt: new Date().toISOString(),
     });
-    return Object.entries(counts).map(([category, value]) => ({
-      name: CATEGORY_LABELS[category] || category,
-      value,
-      color: CATEGORY_COLORS[category] || '#6B7280',
-      category,
-    }));
-  }, [media]);
+    setIsEditing(false);
+  };
 
-  // Media per project
-  const projectData = useMemo(() => {
-    return projects.map(project => ({
-      name: (project.title || project.name || '').length > 20
-        ? (project.title || project.name || '').substring(0, 20) + '...'
-        : (project.title || project.name || ''),
-      count: media.filter(m =>
-        m.projectIds?.some((p: any) => (typeof p === 'string' ? p : p._id) === project._id)
-      ).length,
-    }));
-  }, [projects, media]);
+  const handleAddWidget = (type: WidgetType) => {
+    const entry = getRegistryEntry(type);
+    if (!entry) return;
 
-  // Tag usage counts
-  const tagUsageCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    media.forEach(item => {
-      item.tagIds?.forEach((tag: any) => {
-        const name = typeof tag === 'string' ? tag : tag.name;
-        if (name) counts[name] = (counts[name] || 0) + 1;
+    const newWidget: WidgetConfig = {
+      i: generateWidgetId(type),
+      type,
+      x: 0,
+      y: Infinity, // placed at the bottom
+      w: entry.defaultW,
+      h: entry.defaultH,
+      minW: entry.minW,
+      minH: entry.minH,
+      maxW: entry.maxW,
+      maxH: entry.maxH,
+      settings: entry.defaultSettings ? { ...entry.defaultSettings } : undefined,
+    };
+
+    setWidgets((prev) => [...prev, newWidget]);
+    setActivePresetId(null);
+  };
+
+  const handleRemoveWidget = (widgetId: string) => {
+    setWidgets((prev) => prev.filter((w) => w.i !== widgetId));
+    setActivePresetId(null);
+  };
+
+  const handleApplyPreset = (presetId: string) => {
+    const preset = DASHBOARD_PRESETS.find((p) => p.id === presetId);
+    if (preset) {
+      setWidgets(preset.widgets);
+      setActivePresetId(presetId);
+      setPresetMenuOpen(false);
+      saveDashboardLayout({
+        presetId: presetId,
+        widgets: preset.widgets,
+        savedAt: new Date().toISOString(),
       });
-    });
-    return counts;
-  }, [media]);
+    }
+  };
 
-  const topTags = useMemo(() => {
-    return Object.entries(tagUsageCounts)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 10)
-      .map(([tag, count]) => ({ tag, count }));
-  }, [tagUsageCounts]);
+  const handleReset = () => {
+    handleApplyPreset('overview');
+    setIsEditing(false);
+  };
 
-  const totalTags = tags.length;
-  const avgTagsPerMedia = media.length > 0
-    ? (media.reduce((acc, m) => acc + (m.tagIds?.length || 0), 0) / media.length).toFixed(1)
-    : '0';
+  // ─── Active widget types (for palette) ──────────────────────
+  const activeWidgetTypes = widgets.map((w) => w.type);
 
-  if (loading) return <div className="p-10 text-center">Loading dashboard...</div>;
+  // ─── Layout for react-grid-layout ───────────────────────────
+  const gridLayouts = useMemo(() => {
+    const lg = widgets.map((w) => ({
+      i: w.i,
+      x: w.x,
+      y: w.y,
+      w: w.w,
+      h: w.h,
+      minW: w.minW || getRegistryEntry(w.type)?.minW || 2,
+      minH: w.minH || getRegistryEntry(w.type)?.minH || 2,
+      maxW: w.maxW || getRegistryEntry(w.type)?.maxW || 12,
+      maxH: w.maxH || getRegistryEntry(w.type)?.maxH || 8,
+      static: !isEditing,
+    }));
+    return { lg, md: lg, sm: lg } as Record<BreakpointKey, typeof lg>;
+  }, [widgets, isEditing]);
+
+  // ─── Widget renderer ────────────────────────────────────────
+  const renderWidget = (widget: WidgetConfig) => {
+    const commonProps = {
+      isEditing,
+      onRemove: () => handleRemoveWidget(widget.i),
+    };
+
+    switch (widget.type) {
+      case 'stats-card':
+        return (
+          <StatsCardWidget
+            metric={widget.settings?.metric || 'totalProjects'}
+            data={stats}
+            {...commonProps}
+          />
+        );
+      case 'pie-chart':
+        return <PieChartWidget media={media} {...commonProps} />;
+      case 'bar-chart':
+        return <BarChartWidget media={media} projects={projects} {...commonProps} />;
+      case 'top-tags':
+        return (
+          <TopTagsWidget
+            media={media}
+            count={widget.settings?.count || 10}
+            {...commonProps}
+          />
+        );
+      case 'media-breakdown':
+        return <MediaBreakdownWidget media={media} {...commonProps} />;
+      case 'recent-activity':
+        return <RecentActivityWidget media={media} {...commonProps} />;
+      case 'mini-graph':
+        return <MiniGraphWidget media={media} projects={projects} {...commonProps} />;
+      case 'tag-relationships':
+        return (
+          <TagRelationshipWidget
+            tags={tags}
+            relationships={relationships}
+            {...commonProps}
+          />
+        );
+      case 'quick-actions':
+        return <QuickActionsWidget {...commonProps} />;
+      default:
+        return <div className="p-4 text-gray-400 text-sm">Unknown widget type</div>;
+    }
+  };
+
+  // ─── Render ──────────────────────────────────────────────────
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-8 h-8 border-2 border-blue-300 border-t-blue-600 rounded-full animate-spin mx-auto mb-3" />
+          <p className="text-gray-500 text-sm">Loading dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
+  const currentPreset = DASHBOARD_PRESETS.find((p) => p.id === activePresetId);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white">
-      <div className="container mx-auto px-6 py-12">
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-blue-900 mb-2">Dashboard</h1>
-          <p className="text-gray-600">Overview of your digital watershed</p>
-        </div>
+      <div className="container mx-auto px-6 py-8">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-4xl font-bold text-blue-900 mb-1">Dashboard</h1>
+            <p className="text-gray-500 text-sm">
+              {currentPreset
+                ? `${currentPreset.name} layout`
+                : 'Custom layout'}{' '}
+              · {widgets.length} widgets
+            </p>
+          </div>
 
-        {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-blue-100">
-            <div className="text-sm text-gray-600 mb-1">Total Projects</div>
-            <div className="text-3xl font-bold text-blue-900">{projects.length}</div>
-          </div>
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-blue-100">
-            <div className="text-sm text-gray-600 mb-1">Total Media</div>
-            <div className="text-3xl font-bold text-blue-900">{media.length}</div>
-          </div>
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-blue-100">
-            <div className="text-sm text-gray-600 mb-1">Total Tags</div>
-            <div className="text-3xl font-bold text-blue-900">{totalTags}</div>
-          </div>
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-blue-100">
-            <div className="text-sm text-gray-600 mb-1">Avg Tags/Media</div>
-            <div className="text-3xl font-bold text-blue-900">{avgTagsPerMedia}</div>
-          </div>
-        </div>
+          <div className="flex items-center gap-2">
+            {/* Preset Switcher */}
+            <div className="relative">
+              <button
+                onClick={() => setPresetMenuOpen(!presetMenuOpen)}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg border border-blue-200 bg-white text-sm text-blue-700 hover:bg-blue-50 transition-colors"
+              >
+                <Bookmark className="size-4" />
+                {currentPreset?.name || 'Custom'}
+                <ChevronDown className="size-3.5" />
+              </button>
 
-        {/* Charts */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          {/* Media by Type */}
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-blue-100">
-            <h2 className="text-lg font-semibold text-blue-900 mb-4">Media Distribution by Type</h2>
-            {mediaTypeData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={300}>
-                <PieChart>
-                  <Pie
-                    data={mediaTypeData}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    label={(entry) => `${entry.name} (${entry.value})`}
-                    outerRadius={80}
-                    fill="#8884d8"
-                    dataKey="value"
-                  >
-                    {mediaTypeData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
+              {presetMenuOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setPresetMenuOpen(false)}
+                  />
+                  <div className="absolute right-0 top-full mt-1 z-50 bg-white rounded-xl shadow-lg border border-blue-100 py-1 w-56">
+                    {DASHBOARD_PRESETS.map((preset) => (
+                      <button
+                        key={preset.id}
+                        onClick={() => handleApplyPreset(preset.id)}
+                        className={`w-full text-left px-4 py-2.5 hover:bg-blue-50 transition-colors ${
+                          activePresetId === preset.id
+                            ? 'bg-blue-50 text-blue-700'
+                            : 'text-gray-700'
+                        }`}
+                      >
+                        <div className="text-sm font-medium">{preset.name}</div>
+                        <div className="text-[11px] text-gray-400">{preset.description}</div>
+                      </button>
                     ))}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="h-[300px] flex items-center justify-center text-gray-400">No media yet</div>
-            )}
-          </div>
+                  </div>
+                </>
+              )}
+            </div>
 
-          {/* Media by Project */}
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-blue-100">
-            <h2 className="text-lg font-semibold text-blue-900 mb-4">Media by Project</h2>
-            {projectData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={projectData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                  <XAxis dataKey="name" tick={{ fill: '#6B7280', fontSize: 12 }} />
-                  <YAxis tick={{ fill: '#6B7280', fontSize: 12 }} />
-                  <Tooltip />
-                  <Bar dataKey="count" fill="#3B82F6" radius={[8, 8, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+            {/* Edit / Save buttons */}
+            {isEditing ? (
+              <>
+                <button
+                  onClick={() => setPaletteOpen(true)}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors text-sm font-medium"
+                >
+                  <Plus className="size-4" />
+                  Add Widget
+                </button>
+                <button
+                  onClick={handleReset}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors text-sm"
+                >
+                  <RotateCcw className="size-4" />
+                  Reset
+                </button>
+                <button
+                  onClick={handleSave}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors text-sm font-medium shadow-sm"
+                >
+                  <Save className="size-4" />
+                  Save Layout
+                </button>
+              </>
             ) : (
-              <div className="h-[300px] flex items-center justify-center text-gray-400">No projects yet</div>
+              <button
+                onClick={() => setIsEditing(true)}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg border border-blue-200 bg-white text-blue-700 hover:bg-blue-50 transition-colors text-sm"
+              >
+                <Edit3 className="size-4" />
+                Customize
+              </button>
             )}
           </div>
         </div>
 
-        {/* Top Tags and Media Type Breakdown */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Top Tags */}
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-blue-100">
-            <h2 className="text-lg font-semibold text-blue-900 mb-4">Top Tags</h2>
-            <div className="space-y-3">
-              {topTags.length > 0 ? topTags.map((item, index) => (
-                <div key={item.tag} className="flex items-center gap-4">
-                  <div className="text-sm font-medium text-blue-600 w-6">{index + 1}</div>
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm text-gray-700">{item.tag}</span>
-                      <span className="text-sm font-medium text-blue-900">{item.count}</span>
-                    </div>
-                    <div className="h-2 bg-blue-100 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-blue-500 rounded-full"
-                        style={{ width: `${(item.count / Math.max(...topTags.map(t => t.count))) * 100}%` }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              )) : (
-                <p className="text-gray-400 text-sm">No tags in use yet</p>
-              )}
-            </div>
+        {/* Edit mode banner */}
+        {isEditing && (
+          <div className="mb-4 px-4 py-3 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-500 text-white text-sm flex items-center gap-3 shadow-sm">
+            <Edit3 className="size-4 shrink-0" />
+            <span className="flex-1">
+              <strong>Edit Mode</strong> — Drag widgets to rearrange, resize with handles, or
+              remove with the × button. Click "Save Layout" when done.
+            </span>
+            <button
+              onClick={handleSave}
+              className="shrink-0 px-3 py-1 rounded-lg bg-white/20 hover:bg-white/30 transition-colors text-xs font-medium"
+            >
+              Done Editing
+            </button>
           </div>
+        )}
 
-          {/* Media Type Breakdown */}
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-blue-100">
-            <h2 className="text-lg font-semibold text-blue-900 mb-4">Media Type Breakdown</h2>
-            <div className="space-y-4">
-              {mediaTypeData.length > 0 ? mediaTypeData.map((type) => {
-                const Icon = getMediaIcon(type.category);
-                return (
-                  <div key={type.name} className="flex items-center gap-4">
-                    <div
-                      className="p-3 rounded-lg"
-                      style={{ backgroundColor: type.color + '20' }}
-                    >
-                      <Icon className="size-5" style={{ color: type.color }} />
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-sm font-medium text-gray-700">{type.name}</span>
-                        <span className="text-sm font-medium text-blue-900">{type.value}</span>
-                      </div>
-                      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                        <div
-                          className="h-full rounded-full"
-                          style={{
-                            width: `${media.length > 0 ? (type.value / media.length) * 100 : 0}%`,
-                            backgroundColor: type.color
-                          }}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                );
-              }) : (
-                <p className="text-gray-400 text-sm">No media yet</p>
-              )}
+        {/* Widget Grid */}
+        <div ref={containerRef}>
+          {widgets.length > 0 && mounted ? (
+            <ResponsiveGridLayout
+              className="layout"
+              width={containerWidth}
+              layouts={gridLayouts}
+              breakpoints={{ lg: 1200, md: 996, sm: 768 }}
+              cols={{ lg: 12, md: 12, sm: 6 }}
+              rowHeight={60}
+              margin={[16, 16]}
+              containerPadding={[0, 0]}
+              resizeConfig={{ enabled: isEditing }}
+              dragConfig={{
+                enabled: isEditing,
+                handle: '.drag-handle',
+              }}
+              onLayoutChange={(layout) => handleLayoutChange(layout as any[])}
+            >
+              {widgets.map((widget) => (
+                <div key={widget.i}>{renderWidget(widget)}</div>
+              ))}
+            </ResponsiveGridLayout>
+          ) : widgets.length === 0 ? (
+            <div className="text-center py-20">
+              <div className="text-6xl mb-4">📊</div>
+              <h3 className="text-lg font-semibold text-blue-900 mb-2">No Widgets</h3>
+              <p className="text-gray-500 text-sm mb-4">
+                Your dashboard is empty. Add widgets or apply a preset to get started.
+              </p>
+              <button
+                onClick={() => {
+                  setIsEditing(true);
+                  setPaletteOpen(true);
+                }}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+              >
+                Add Your First Widget
+              </button>
             </div>
-          </div>
+          ) : null}
         </div>
       </div>
+
+      {/* Widget Palette Modal */}
+      <WidgetPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        onAdd={handleAddWidget}
+        activeWidgetTypes={activeWidgetTypes}
+      />
     </div>
   );
 };
