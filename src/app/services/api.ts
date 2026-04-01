@@ -159,5 +159,44 @@ export const api = {
     getTagRelationshipSuggestions: async () => {
         const response = await fetch(`${API_URL}/tag-relationships/suggestions`);
         return handleResponse(response);
+    },
+
+    // Notes
+    getNotes: async (entityId: string, entityModel: string) => {
+        const response = await fetch(`${API_URL}/notes?entityId=${entityId}&entityModel=${entityModel}`);
+        return handleResponse(response);
+    },
+    createNote: async (data: { entityId: string; entityModel: string; content: string; title?: string }) => {
+        const response = await fetch(`${API_URL}/notes`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        });
+        return handleResponse(response);
+    },
+    updateNote: async (id: string, data: { title?: string; content?: string }) => {
+        const response = await fetch(`${API_URL}/notes/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        });
+        return handleResponse(response);
+    },
+    deleteNote: async (id: string) => {
+        const response = await fetch(`${API_URL}/notes/${id}`, {
+            method: 'DELETE',
+        });
+        return handleResponse(response);
+    },
+
+    // Audit Logs
+    getAuditLogs: async (params?: { page?: number; limit?: number; targetType?: string; actionType?: string }) => {
+        const searchParams = new URLSearchParams();
+        if (params?.page) searchParams.set('page', String(params.page));
+        if (params?.limit) searchParams.set('limit', String(params.limit));
+        if (params?.targetType) searchParams.set('targetType', params.targetType);
+        if (params?.actionType) searchParams.set('actionType', params.actionType);
+        const response = await fetch(`${API_URL}/audit-logs?${searchParams.toString()}`);
+        return handleResponse(response);
     }
 };

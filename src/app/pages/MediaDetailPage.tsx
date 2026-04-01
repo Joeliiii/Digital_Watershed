@@ -3,14 +3,10 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../services/api.ts';
 import { ArrowLeft, Save, Trash2, Edit, Download } from 'lucide-react';
 import MediaPreview from '../components/MediaPreview';
+import NotesPanel from '../components/NotesPanel';
 import { getMediaLabel } from '../utils/mediaUtils';
+import { recordMediaView } from '../utils/viewHistory';
 import { API_URL } from '../services/constants';
-
-declare global {
-    interface Window {
-        recordMediaView?: (mediaId: string) => void;
-    }
-}
 
 const MediaDetailPage = () => {
     const { id } = useParams<{ id: string }>();
@@ -40,8 +36,8 @@ const MediaDetailPage = () => {
     }, [id]);
 
     useEffect(() => {
-        if (id && window.recordMediaView) {
-            window.recordMediaView(id);
+        if (id) {
+            recordMediaView(id);
         }
     }, [id]);
 
@@ -177,7 +173,7 @@ const MediaDetailPage = () => {
                                 </div>
                                 {item.notes && (
                                     <div>
-                                        <h3 className="text-sm font-semibold text-gray-500 uppercase">Notes</h3>
+                                        <h3 className="text-sm font-semibold text-gray-500 uppercase">Legacy Notes</h3>
                                         <p className="mt-1 text-gray-700 bg-yellow-50 p-4 rounded-lg">{item.notes}</p>
                                     </div>
                                 )}
@@ -187,6 +183,9 @@ const MediaDetailPage = () => {
                                 </div>
                             </div>
                         )}
+
+                        {/* Notes Panel */}
+                        {id && <NotesPanel entityId={id} entityModel="Item" />}
                     </div>
                 </div>
             </div>

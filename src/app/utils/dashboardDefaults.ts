@@ -9,7 +9,8 @@ export type WidgetType =
   | 'recent-activity'
   | 'mini-graph'
   | 'tag-relationships'
-  | 'quick-actions';
+  | 'quick-actions'
+  | 'recently-viewed';
 
 export interface WidgetConfig {
   /** Unique instance id (e.g. "stats-card-1") */
@@ -153,6 +154,18 @@ export const WIDGET_REGISTRY: WidgetRegistryEntry[] = [
     minH: 3,
     maxW: 6,
     maxH: 5,
+  },
+  {
+    type: 'recently-viewed',
+    label: 'Recently Viewed',
+    description: 'Your recently accessed media items',
+    icon: 'Clock',
+    defaultW: 6,
+    defaultH: 5,
+    minW: 3,
+    minH: 3,
+    maxW: 12,
+    maxH: 8,
   },
 ];
 

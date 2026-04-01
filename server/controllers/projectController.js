@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import Project from '../models/Project.js';
 import Item from '../models/Item.js';
+import { logAction } from './auditLogController.js';
 
 // @desc    Get all projects (simple list)
 // @route   GET /api/projects
@@ -27,6 +28,7 @@ const createProject = async (req, res) => {
             visibility: visibility || 'private',
             ownerId: req.body.ownerId || "6987c45da0cb4423e71e1ffd" // TODO: Use auth middleware
         });
+        await logAction('create', 'Project', project._id, { title: project.title });
         res.status(201).json(project);
     } catch (error) {
         res.status(400).json({ message: error.message });
@@ -45,6 +47,7 @@ const updateProject = async (req, res) => {
         if (!project) {
             return res.status(404).json({ message: 'Project not found' });
         }
+        await logAction('update', 'Project', project._id, { title: project.title });
         res.json(project);
     } catch (error) {
         res.status(400).json({ message: error.message });
@@ -60,6 +63,7 @@ const deleteProject = async (req, res) => {
         if (!project) {
             return res.status(404).json({ message: 'Project not found' });
         }
+        await logAction('delete', 'Project', project._id, { title: project.title });
         res.json({ message: 'Project deleted' });
     } catch (error) {
         res.status(500).json({ message: error.message });

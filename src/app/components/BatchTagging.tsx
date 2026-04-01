@@ -1,9 +1,16 @@
-import { useState, useMemo } from 'react';
-import { Tag, Check, X, Search, Filter, Plus, Minus, Tags } from 'lucide-react';
-import { useWatershed } from '../context/WatershedContext';
+import { useState, useMemo, useEffect } from 'react';
+import { Tag, Check, X, Search, Filter, Plus, Minus, Tags, Loader2 } from 'lucide-react';
+import { api } from '../services/api';
+import { getMediaIcon, getTypeColor, getMediaCategory, getMediaLabel } from '../utils/mediaUtils';
+import { API_URL } from '../services/constants';
 
 const BatchTagging = () => {
-  const { media, setMedia, tags, projects } = useWatershed();
+  const [media, setMedia] = useState<any[]>([]);
+  const [tags, setTags] = useState<any[]>([]);
+  const [projects, setProjects] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
   const [selectedMedia, setSelectedMedia] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
   const [filterProject, setFilterProject] = useState<string>('all');
@@ -12,19 +19,55 @@ const BatchTagging = () => {
   const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set());
   const [tagAction, setTagAction] = useState<'add' | 'remove'>('add');
 
-  // Filter media based on search and filters
+  // Fetch real data
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [mediaData, tagsData, projectsData] = await Promise.all([
+          api.getItems(),
+          api.getTags(),
+          api.getProjects(),
+        ]);
+        setMedia(mediaData);
+        setTags(tagsData);
+        setProjects(projectsData);
+      } catch (error) {
+        console.error('Failed to load batch tagging data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
+
+  // Derive available types from data
+  const availableTypes = useMemo(() => {
+    const cats = new Set<string>();
+    media.forEach(item => {
+      const cat = getMediaCategory(item.metadata?.mimetype || item.mediaType);
+      cats.add(cat);
+    });
+    return Array.from(cats).sort();
+  }, [media]);
+
+  const categoryLabels: Record<string, string> = {
+    document: 'Documents', image: 'Images', video: 'Videos',
+    audio: 'Audio', code: 'Code', other: 'Other',
+  };
+
+  // Filter media
   const filteredMedia = useMemo(() => {
     return media.filter(item => {
-      const matchesSearch = item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                           item.description.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesProject = filterProject === 'all' || item.projectId === filterProject;
-      const matchesType = filterType === 'all' || item.type === filterType;
-      
-      return matchesSearch && matchesProject && matchesType;
+      const matchesSearch = searchQuery === '' ||
+        (item.title || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (item.description || '').toLowerCase().includes(searchQuery.toLowerCase());
+      const itemCategory = getMediaCategory(item.metadata?.mimetype || item.mediaType);
+      const matchesType = filterType === 'all' || itemCategory === filterType;
+      const matchesProject = filterProject === 'all' || item.projectIds?.some((p: any) => (typeof p === 'string' ? p : p._id) === filterProject);
+      return matchesSearch && matchesType && matchesProject;
     });
-  }, [media, searchQuery, filterProject, filterType]);
+  }, [media, searchQuery, filterType, filterProject]);
 
-  // Toggle individual media selection
   const toggleMediaSelection = (mediaId: string) => {
     const newSelection = new Set(selectedMedia);
     if (newSelection.has(mediaId)) {
@@ -35,412 +78,328 @@ const BatchTagging = () => {
     setSelectedMedia(newSelection);
   };
 
-  // Select all filtered media
-  const selectAll = () => {
-    const allIds = new Set(filteredMedia.map(m => m.id));
-    setSelectedMedia(allIds);
-  };
+  const selectAll = () => setSelectedMedia(new Set(filteredMedia.map(m => m._id)));
+  const deselectAll = () => setSelectedMedia(new Set());
 
-  // Deselect all media
-  const deselectAll = () => {
-    setSelectedMedia(new Set());
-  };
-
-  // Toggle tag selection for batch operation
-  const toggleTagSelection = (tagName: string) => {
+  const toggleTagSelection = (tagId: string) => {
     const newSelection = new Set(selectedTags);
-    if (newSelection.has(tagName)) {
-      newSelection.delete(tagName);
+    if (newSelection.has(tagId)) {
+      newSelection.delete(tagId);
     } else {
-      newSelection.add(tagName);
+      newSelection.add(tagId);
     }
     setSelectedTags(newSelection);
   };
 
-  // Apply batch tagging operation
-  const applyBatchTagging = () => {
-    if (selectedMedia.size === 0 || selectedTags.size === 0) {
-      alert('Please select both media items and tags to apply.');
-      return;
-    }
+  // Apply batch tagging via API
+  const applyBatchTagging = async () => {
+    if (selectedMedia.size === 0 || selectedTags.size === 0) return;
+    setSaving(true);
 
-    const updatedMedia = media.map(item => {
-      if (selectedMedia.has(item.id)) {
-        let newTags = [...item.tags];
-        
+    try {
+      const updates = Array.from(selectedMedia).map(async (mediaId) => {
+        const item = media.find(m => m._id === mediaId);
+        if (!item) return;
+
+        const currentTagIds = (item.tagIds || []).map((t: any) => typeof t === 'string' ? t : t?._id).filter(Boolean);
+
+        let newTagIds: string[];
         if (tagAction === 'add') {
-          // Add tags (avoid duplicates)
-          selectedTags.forEach(tag => {
-            if (!newTags.includes(tag)) {
-              newTags.push(tag);
-            }
-          });
+          const combined = new Set([...currentTagIds, ...selectedTags]);
+          newTagIds = Array.from(combined);
         } else {
-          // Remove tags
-          newTags = newTags.filter(tag => !selectedTags.has(tag));
+          newTagIds = currentTagIds.filter((id: string) => !selectedTags.has(id));
         }
-        
-        return { ...item, tags: newTags };
-      }
-      return item;
-    });
 
-    setMedia(updatedMedia);
-    
-    // Reset selections
-    setSelectedMedia(new Set());
-    setSelectedTags(new Set());
-    setShowTagPanel(false);
-    
-    alert(`Successfully ${tagAction === 'add' ? 'added' : 'removed'} tags ${tagAction === 'add' ? 'to' : 'from'} ${selectedMedia.size} item(s)!`);
+        return api.updateItem(mediaId, { tagIds: newTagIds });
+      });
+
+      const results = await Promise.all(updates);
+      // Refresh media list after bulk update
+      const updatedMedia = await api.getItems();
+      setMedia(updatedMedia);
+
+      setSelectedMedia(new Set());
+      setSelectedTags(new Set());
+      setShowTagPanel(false);
+    } catch (error) {
+      console.error('Batch tagging failed:', error);
+    } finally {
+      setSaving(false);
+    }
   };
 
-  
+  // Common tags across selected items
   const getCommonTags = () => {
     if (selectedMedia.size === 0) return new Set<string>();
-    
-    const selectedItems = media.filter(m => selectedMedia.has(m.id));
+    const selectedItems = media.filter(m => selectedMedia.has(m._id));
     const tagCounts = new Map<string, number>();
-    
     selectedItems.forEach(item => {
-      item.tags.forEach(tag => {
-        tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1);
+      (item.tagIds || []).forEach((tag: any) => {
+        const tagId = typeof tag === 'string' ? tag : tag?._id;
+        if (tagId) tagCounts.set(tagId, (tagCounts.get(tagId) || 0) + 1);
       });
     });
-    
-    
     const commonTags = new Set<string>();
-    tagCounts.forEach((count, tag) => {
-      if (count === selectedMedia.size) {
-        commonTags.add(tag);
-      }
+    tagCounts.forEach((count, tagId) => {
+      if (count === selectedMedia.size) commonTags.add(tagId);
     });
-    
     return commonTags;
   };
 
   const commonTags = getCommonTags();
 
-  
-  const typeConfig = {
-    document: { icon: '📄', color: 'bg-orange-100 text-orange-600' },
-    image: { icon: '🖼️', color: 'bg-blue-100 text-blue-600' },
-    video: { icon: '🎥', color: 'bg-purple-100 text-purple-600' },
-    audio: { icon: '🎵', color: 'bg-green-100 text-green-600' },
-    code: { icon: '💻', color: 'bg-gray-100 text-gray-600' }
-  };
+  if (loading) return (
+    <div className="flex items-center justify-center py-16">
+      <div className="text-center">
+        <div className="w-8 h-8 border-2 border-blue-300 border-t-blue-600 rounded-full animate-spin mx-auto mb-3" />
+        <p className="text-gray-500 text-sm">Loading media...</p>
+      </div>
+    </div>
+  );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-blue-50 to-cyan-50">
-      <div className="container mx-auto px-6 py-12">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-slate-900 mb-2 tracking-tight">
-            Batch Tagging
-          </h1>
-          <p className="text-slate-600">
-            Select multiple media items and apply tags in bulk
-          </p>
+    <div>
+      {/* Action Bar */}
+      <div className="bg-white rounded-xl p-6 shadow-sm border border-blue-100 mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-4">
+            <div className="text-sm font-medium text-gray-700">
+              {selectedMedia.size} item{selectedMedia.size !== 1 ? 's' : ''} selected
+            </div>
+            {selectedMedia.size > 0 && (
+              <button onClick={deselectAll} className="text-sm text-blue-600 hover:text-blue-700 font-medium">
+                Deselect All
+              </button>
+            )}
+            {filteredMedia.length > 0 && selectedMedia.size === 0 && (
+              <button onClick={selectAll} className="text-sm text-blue-600 hover:text-blue-700 font-medium">
+                Select All ({filteredMedia.length})
+              </button>
+            )}
+          </div>
+
+          <button
+            onClick={() => setShowTagPanel(true)}
+            disabled={selectedMedia.size === 0}
+            className="flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
+          >
+            <Tags className="size-5" />
+            <span className="font-medium">Apply Tags</span>
+          </button>
         </div>
 
-        {/* Action Bar */}
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-200 mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-4">
-              <div className="text-sm font-medium text-slate-700">
-                {selectedMedia.size} item{selectedMedia.size !== 1 ? 's' : ''} selected
-              </div>
-              {selectedMedia.size > 0 && (
-                <button
-                  onClick={deselectAll}
-                  className="text-sm text-blue-600 hover:text-blue-700 font-medium"
-                >
-                  Deselect All
-                </button>
-              )}
-              {filteredMedia.length > 0 && selectedMedia.size === 0 && (
-                <button
-                  onClick={selectAll}
-                  className="text-sm text-blue-600 hover:text-blue-700 font-medium"
-                >
-                  Select All
-                </button>
-              )}
-            </div>
-
-            <button
-              onClick={() => setShowTagPanel(true)}
-              disabled={selectedMedia.size === 0}
-              className="flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
-            >
-              <Tags className="size-5" />
-              <span className="font-medium">Apply Tags</span>
-            </button>
+        {/* Filters */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 size-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search media..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 rounded-lg border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
           </div>
-
-          {/* Filters */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Search */}
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 size-4 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search media..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            {/* Project Filter */}
-            <select
-              value={filterProject}
-              onChange={(e) => setFilterProject(e.target.value)}
-              className="px-4 py-2 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="all">All Projects</option>
-              {projects.map(project => (
-                <option key={project.id} value={project.id}>{project.name}</option>
-              ))}
-            </select>
-
-            {/* Type Filter */}
-            <select
-              value={filterType}
-              onChange={(e) => setFilterType(e.target.value)}
-              className="px-4 py-2 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="all">All Types</option>
-              <option value="document">Documents</option>
-              <option value="image">Images</option>
-              <option value="video">Videos</option>
-              <option value="audio">Audio</option>
-              <option value="code">Code</option>
-            </select>
-          </div>
+          <select
+            value={filterProject}
+            onChange={(e) => setFilterProject(e.target.value)}
+            className="px-4 py-2 rounded-lg border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+          >
+            <option value="all">All Projects</option>
+            {projects.map((project: any) => (
+              <option key={project._id} value={project._id}>{project.title}</option>
+            ))}
+          </select>
+          <select
+            value={filterType}
+            onChange={(e) => setFilterType(e.target.value)}
+            className="px-4 py-2 rounded-lg border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+          >
+            <option value="all">All Types</option>
+            {availableTypes.map(cat => (
+              <option key={cat} value={cat}>{categoryLabels[cat] || cat}</option>
+            ))}
+          </select>
         </div>
+      </div>
 
-        {/* Tag Panel Modal */}
-        {showTagPanel && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden">
-              <div className="p-6 border-b border-slate-200">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-2xl font-bold text-slate-900">
-                    Apply Tags to {selectedMedia.size} Item{selectedMedia.size !== 1 ? 's' : ''}
-                  </h2>
-                  <button
-                    onClick={() => {
-                      setShowTagPanel(false);
-                      setSelectedTags(new Set());
-                    }}
-                    className="text-slate-400 hover:text-slate-600 transition-colors"
-                  >
-                    <X className="size-6" />
-                  </button>
-                </div>
-
-                {/* Action Toggle */}
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setTagAction('add')}
-                    className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg transition-all ${
-                      tagAction === 'add'
-                        ? 'bg-green-600 text-white'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                    }`}
-                  >
-                    <Plus className="size-5" />
-                    <span className="font-medium">Add Tags</span>
-                  </button>
-                  <button
-                    onClick={() => setTagAction('remove')}
-                    className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg transition-all ${
-                      tagAction === 'remove'
-                        ? 'bg-red-600 text-white'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                    }`}
-                  >
-                    <Minus className="size-5" />
-                    <span className="font-medium">Remove Tags</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Tags List */}
-              <div className="p-6 overflow-y-auto max-h-96">
-                {commonTags.size > 0 && (
-                  <div className="mb-6">
-                    <h3 className="text-sm font-medium text-slate-700 mb-3">
-                      Common Tags (on all selected items)
-                    </h3>
-                    <div className="flex flex-wrap gap-2 mb-4 p-3 bg-blue-50 rounded-lg">
-                      {Array.from(commonTags).map(tagName => {
-                        const tag = tags.find(t => t.name === tagName);
-                        return (
-                          <div
-                            key={tagName}
-                            className="px-3 py-1 rounded-full text-sm font-medium bg-white border border-blue-200 text-blue-700"
-                            style={{ borderColor: tag?.color }}
-                          >
-                            {tagName}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                <h3 className="text-sm font-medium text-slate-700 mb-3">
-                  {tagAction === 'add' ? 'Select tags to add:' : 'Select tags to remove:'}
-                </h3>
-                <div className="space-y-2">
-                  {tags.map(tag => (
-                    <button
-                      key={tag.id}
-                      onClick={() => toggleTagSelection(tag.name)}
-                      className={`w-full flex items-center justify-between p-3 rounded-lg border-2 transition-all ${
-                        selectedTags.has(tag.name)
-                          ? 'border-blue-500 bg-blue-50'
-                          : 'border-slate-200 hover:border-slate-300'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div
-                          className="w-4 h-4 rounded-full"
-                          style={{ backgroundColor: tag.color }}
-                        />
-                        <div className="text-left">
-                          <div className="font-medium text-slate-900">{tag.name}</div>
-                          {tag.description && (
-                            <div className="text-xs text-slate-500">{tag.description}</div>
-                          )}
-                        </div>
-                      </div>
-                      {selectedTags.has(tag.name) && (
-                        <Check className="size-5 text-blue-600" />
-                      )}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="p-6 border-t border-slate-200 flex gap-3">
+      {/* Tag Panel Modal */}
+      {showTagPanel && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden">
+            <div className="p-6 border-b border-gray-100">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold text-blue-900">
+                  Apply Tags to {selectedMedia.size} Item{selectedMedia.size !== 1 ? 's' : ''}
+                </h2>
                 <button
-                  onClick={applyBatchTagging}
-                  disabled={selectedTags.size === 0}
-                  className="flex-1 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-md font-medium"
+                  onClick={() => { setShowTagPanel(false); setSelectedTags(new Set()); }}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
                 >
-                  {tagAction === 'add' ? 'Add' : 'Remove'} {selectedTags.size} Tag{selectedTags.size !== 1 ? 's' : ''}
+                  <X className="size-6" />
+                </button>
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setTagAction('add')}
+                  className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg transition-all ${
+                    tagAction === 'add' ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  <Plus className="size-5" /> <span className="font-medium">Add Tags</span>
                 </button>
                 <button
-                  onClick={() => {
-                    setShowTagPanel(false);
-                    setSelectedTags(new Set());
-                  }}
-                  className="px-6 py-3 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 transition-all"
+                  onClick={() => setTagAction('remove')}
+                  className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg transition-all ${
+                    tagAction === 'remove' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
                 >
-                  Cancel
+                  <Minus className="size-5" /> <span className="font-medium">Remove Tags</span>
                 </button>
               </div>
             </div>
-          </div>
-        )}
 
-        {/* Media Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {filteredMedia.map(item => {
-            const project = projects.find(p => p.id === item.projectId);
-            const isSelected = selectedMedia.has(item.id);
-            const config = typeConfig[item.type];
-
-            return (
-              <div
-                key={item.id}
-                onClick={() => toggleMediaSelection(item.id)}
-                className={`bg-white rounded-xl shadow-sm border-2 transition-all cursor-pointer ${
-                  isSelected
-                    ? 'border-blue-500 ring-4 ring-blue-100'
-                    : 'border-slate-200 hover:border-slate-300'
-                }`}
-              >
-                <div className="p-4">
-                  {/* Selection Indicator */}
-                  <div className="flex items-start justify-between mb-3">
-                    <div className={`flex items-center justify-center w-6 h-6 rounded border-2 transition-all ${
-                      isSelected
-                        ? 'bg-blue-600 border-blue-600'
-                        : 'border-slate-300'
-                    }`}>
-                      {isSelected && <Check className="size-4 text-white" />}
-                    </div>
-                    <div className={`px-2 py-1 rounded text-xs font-medium ${config.color}`}>
-                      {config.icon} {item.type}
-                    </div>
-                  </div>
-
-                  {/* Media Info */}
-                  <h3 className="font-bold text-slate-900 mb-2 line-clamp-2">
-                    {item.title}
-                  </h3>
-                  <p className="text-sm text-slate-600 mb-3 line-clamp-2">
-                    {item.description}
-                  </p>
-
-                  {/* Project */}
-                  {project && (
-                    <div className="flex items-center gap-2 mb-3">
-                      <div
-                        className="w-3 h-3 rounded"
-                        style={{ backgroundColor: project.color }}
-                      />
-                      <span className="text-xs text-slate-500">{project.name}</span>
-                    </div>
-                  )}
-
-                  {/* Tags */}
-                  <div className="flex flex-wrap gap-1.5">
-                    {item.tags.slice(0, 3).map(tagName => {
-                      const tag = tags.find(t => t.name === tagName);
+            <div className="p-6 overflow-y-auto max-h-96">
+              {commonTags.size > 0 && (
+                <div className="mb-6">
+                  <h3 className="text-sm font-medium text-gray-700 mb-3">Common Tags (on all selected items)</h3>
+                  <div className="flex flex-wrap gap-2 mb-4 p-3 bg-blue-50 rounded-lg">
+                    {Array.from(commonTags).map(tagId => {
+                      const tag = tags.find((t: any) => t._id === tagId);
                       return (
-                        <div
-                          key={tagName}
-                          className="px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-700"
-                          style={{ 
-                            backgroundColor: tag ? `${tag.color}20` : undefined,
-                            color: tag?.color
-                          }}
-                        >
-                          {tagName}
+                        <div key={tagId} className="px-3 py-1 rounded-full text-sm font-medium bg-white border border-blue-200 text-blue-700">
+                          {tag?.name || tagId}
                         </div>
                       );
                     })}
-                    {item.tags.length > 3 && (
-                      <div className="px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-500">
-                        +{item.tags.length - 3}
-                      </div>
-                    )}
                   </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              )}
 
-        {/* Empty State */}
-        {filteredMedia.length === 0 && (
-          <div className="text-center py-16">
-            <Filter className="size-16 text-slate-300 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-slate-900 mb-2">
-              No media found
-            </h3>
-            <p className="text-slate-600">
-              Try adjusting your search or filters
-            </p>
+              <h3 className="text-sm font-medium text-gray-700 mb-3">
+                {tagAction === 'add' ? 'Select tags to add:' : 'Select tags to remove:'}
+              </h3>
+              <div className="space-y-2">
+                {tags.map((tag: any) => (
+                  <button
+                    key={tag._id}
+                    onClick={() => toggleTagSelection(tag._id)}
+                    className={`w-full flex items-center justify-between p-3 rounded-lg border-2 transition-all ${
+                      selectedTags.has(tag._id)
+                        ? 'border-blue-500 bg-blue-50'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-4 h-4 rounded-full" style={{ backgroundColor: tag.color || '#3B82F6' }} />
+                      <div className="text-left">
+                        <div className="font-medium text-gray-900">{tag.name}</div>
+                      </div>
+                    </div>
+                    {selectedTags.has(tag._id) && <Check className="size-5 text-blue-600" />}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-gray-100 flex gap-3">
+              <button
+                onClick={applyBatchTagging}
+                disabled={selectedTags.size === 0 || saving}
+                className="flex-1 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-md font-medium flex items-center justify-center gap-2"
+              >
+                {saving && <Loader2 className="size-4 animate-spin" />}
+                {tagAction === 'add' ? 'Add' : 'Remove'} {selectedTags.size} Tag{selectedTags.size !== 1 ? 's' : ''}
+              </button>
+              <button
+                onClick={() => { setShowTagPanel(false); setSelectedTags(new Set()); }}
+                className="px-6 py-3 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition-all"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
-        )}
+        </div>
+      )}
+
+      {/* Media Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        {filteredMedia.map(item => {
+          const isSelected = selectedMedia.has(item._id);
+          const mimeType = item.metadata?.mimetype || item.mediaType;
+          const Icon = getMediaIcon(mimeType);
+          const category = getMediaCategory(mimeType);
+          const isImage = category === 'image' && item.fileId;
+
+          return (
+            <div
+              key={item._id}
+              onClick={() => toggleMediaSelection(item._id)}
+              className={`bg-white rounded-xl shadow-sm border-2 transition-all cursor-pointer overflow-hidden ${
+                isSelected
+                  ? 'border-blue-500 ring-4 ring-blue-100'
+                  : 'border-gray-200 hover:border-gray-300'
+              }`}
+            >
+              {/* Thumbnail */}
+              {isImage && (
+                <div className="h-32 bg-gray-100 flex items-center justify-center overflow-hidden">
+                  <img
+                    src={`${API_URL}/items/${item._id}/file`}
+                    alt={item.title}
+                    className="w-full h-full object-cover"
+                    loading="lazy"
+                  />
+                </div>
+              )}
+
+              <div className="p-4">
+                <div className="flex items-start justify-between mb-3">
+                  <div className={`flex items-center justify-center w-6 h-6 rounded border-2 transition-all ${
+                    isSelected ? 'bg-blue-600 border-blue-600' : 'border-gray-300'
+                  }`}>
+                    {isSelected && <Check className="size-4 text-white" />}
+                  </div>
+                  <div className={`p-1.5 rounded-md ${getTypeColor(mimeType)}`}>
+                    <Icon className="size-3.5" />
+                  </div>
+                </div>
+
+                <h3 className="font-semibold text-gray-900 mb-1 line-clamp-2 text-sm">{item.title}</h3>
+                <p className="text-xs text-gray-500 mb-3 line-clamp-1">{getMediaLabel(mimeType)}</p>
+
+                {/* Tags */}
+                <div className="flex flex-wrap gap-1.5">
+                  {(item.tagIds || []).slice(0, 3).map((tag: any) => {
+                    const tagName = typeof tag === 'string' ? tag : tag?.name;
+                    const tagColor = typeof tag === 'string' ? '#3B82F6' : tag?.color;
+                    return (
+                      <span key={typeof tag === 'string' ? tag : tag?._id} className="px-2 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-600">
+                        {tagName}
+                      </span>
+                    );
+                  })}
+                  {(item.tagIds?.length || 0) > 3 && (
+                    <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-500">
+                      +{item.tagIds.length - 3}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
       </div>
+
+      {filteredMedia.length === 0 && (
+        <div className="text-center py-16">
+          <Filter className="size-16 text-gray-300 mx-auto mb-4" />
+          <h3 className="text-xl font-semibold text-gray-900 mb-2">No media found</h3>
+          <p className="text-gray-600">Try adjusting your search or filters</p>
+        </div>
+      )}
     </div>
   );
 };

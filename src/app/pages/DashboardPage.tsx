@@ -20,6 +20,7 @@ import RecentActivityWidget from '../components/dashboard/RecentActivityWidget';
 import MiniGraphWidget from '../components/dashboard/MiniGraphWidget';
 import TagRelationshipWidget from '../components/dashboard/TagRelationshipWidget';
 import QuickActionsWidget from '../components/dashboard/QuickActionsWidget';
+import RecentlyViewedWidget from '../components/dashboard/RecentlyViewedWidget';
 import WidgetPalette from '../components/dashboard/WidgetPalette';
 
 import {
@@ -253,6 +254,8 @@ const DashboardPage = () => {
         );
       case 'quick-actions':
         return <QuickActionsWidget {...commonProps} />;
+      case 'recently-viewed':
+        return <RecentlyViewedWidget media={media} {...commonProps} />;
       default:
         return <div className="p-4 text-gray-400 text-sm">Unknown widget type</div>;
     }

@@ -14,8 +14,6 @@ import SharedProjectPage from '@/app/pages/SharedProjectPage';
 import TimelinePage from '@/app/pages/TimelinePage';
 
 import LoginPage from '@/app/pages/LoginPage';
-import BatchTagging from './components/BatchTagging';
-import RecentlyViewed from './components/RecentlyViewed';
 
 export default function App() {
   return (
@@ -32,8 +30,6 @@ export default function App() {
             <Route path="/media/create" element={<CreateMediaPage />} />
             <Route path="/media/bulk-upload" element={<BulkUploadPage />} />
             <Route path="/media/:id" element={<MediaDetailPage />} />
-            <Route path="/batch-tagging" element={<BatchTagging />} />
-            <Route path="/recently-viewed" element={<RecentlyViewed />} />
             <Route path="/create-project" element={<CreateProjectPage />} />
             <Route path="/network" element={<NetworkGraphPage />} />
             <Route path="/shared/:token" element={<SharedProjectPage />} />

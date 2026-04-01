@@ -1,13 +1,17 @@
 import Item from '../models/Item.js';
 import Tag from '../models/Tag.js';
 import Project from '../models/Project.js';
+import { logAction } from './auditLogController.js';
 
 // @desc    Get all items
 // @route   GET /api/items
 // @access  Private (TODO: middleware)
 const getItems = async (req, res) => {
     try {
-        const items = await Item.find().sort({ createdAt: -1 });
+        const items = await Item.find()
+            .populate('projectIds', 'title color')
+            .populate('tagIds', 'name color')
+            .sort({ createdAt: -1 });
         res.json(items);
     } catch (error) {
         res.status(500).json({ message: error.message });
@@ -107,6 +111,7 @@ const createItem = async (req, res) => {
         itemData.ownerId = itemData.ownerId || "6987c45da0cb4423e71e1ffd"; // TODO: Authenticated user
 
         const newItem = await Item.create(itemData);
+        await logAction('create', 'Item', newItem._id, { title: newItem.title });
         res.status(201).json(newItem);
     } catch (error) {
         // If error and file was uploaded to GridFS, try to delete it (cleanup)
@@ -200,6 +205,10 @@ const bulkCreateItems = async (req, res) => {
                 errors.push({ file: file.originalname, error: fileError.message });
                 fs.unlink(file.path, () => {});
             }
+        }
+
+        for (const item of results) {
+            await logAction('create', 'Item', item._id, { title: item.title, bulk: true });
         }
 
         res.status(201).json({ created: results, errors });
@@ -299,6 +308,7 @@ const updateItem = async (req, res) => {
                 new: true,
                 runValidators: true
             }).populate('tagIds').populate('projectIds');
+            await logAction('update', 'Item', updatedItem._id, { title: updatedItem.title });
             res.json(updatedItem);
         } else {
             res.status(404).json({ message: 'Item not found' });
@@ -330,6 +340,7 @@ const deleteItem = async (req, res) => {
             }
 
             await item.deleteOne();
+            await logAction('delete', 'Item', req.params.id, { title: item.title });
             res.json({ message: 'Item removed' });
         } else {
             res.status(404).json({ message: 'Item not found' });

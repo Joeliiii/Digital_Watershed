@@ -1,4 +1,5 @@
 import Tag from '../models/Tag.js';
+import { logAction } from './auditLogController.js';
 
 // @desc    Get all tags
 // @route   GET /api/tags
@@ -31,6 +32,7 @@ const createTag = async (req, res) => {
             color: color || '#3B82F6',
             ownerId: ownerId || "6987c45da0cb4423e71e1ffd"
         });
+        await logAction('create', 'Tag', tag._id, { name: tag.name });
         res.status(201).json(tag);
     } catch (error) {
         res.status(400).json({ message: error.message });
@@ -49,6 +51,7 @@ const updateTag = async (req, res) => {
         if (!tag) {
             return res.status(404).json({ message: 'Tag not found' });
         }
+        await logAction('update', 'Tag', tag._id, { name: tag.name });
         res.json(tag);
     } catch (error) {
         res.status(400).json({ message: error.message });
@@ -64,6 +67,7 @@ const deleteTag = async (req, res) => {
         if (!tag) {
             return res.status(404).json({ message: 'Tag not found' });
         }
+        await logAction('delete', 'Tag', tag._id, { name: tag.name });
         res.json({ message: 'Tag deleted' });
     } catch (error) {
         res.status(500).json({ message: error.message });

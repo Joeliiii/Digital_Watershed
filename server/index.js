@@ -9,6 +9,7 @@ import tagRoutes from './routes/tagRoutes.js';
 import tagRelationshipRoutes from './routes/tagRelationshipRoutes.js';
 import artworkRoutes from './routes/artworkRoutes.js';  
 import noteRoutes from './routes/noteRoutes.js';
+import auditLogRoutes from './routes/auditLogRoutes.js';
 
 dotenv.config();
 
@@ -38,6 +39,7 @@ app.use('/api/tags', tagRoutes);
 app.use('/api/tag-relationships', tagRelationshipRoutes);
 app.use('/api/artworks', artworkRoutes);  
 app.use('/api/notes', noteRoutes);
+app.use('/api/audit-logs', auditLogRoutes);
 
 app.get('/', (req, res) => {
     res.send('API is running...');

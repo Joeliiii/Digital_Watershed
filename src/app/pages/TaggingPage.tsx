@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { api } from '../services/api';
-import { Tags, Plus, X, Search, Loader2, Link2, Lightbulb, ArrowRight, Trash2, HelpCircle, ChevronDown } from 'lucide-react';
+import { Tags, Plus, X, Search, Loader2, Link2, Lightbulb, ArrowRight, Trash2, HelpCircle, ChevronDown, Layers } from 'lucide-react';
 import { getMediaIcon, getTypeColor, getMediaCategory, getMediaLabel } from '../utils/mediaUtils';
+import BatchTagging from '../components/BatchTagging';
 
 const TaggingPage = () => {
+  const [activeTab, setActiveTab] = useState<'manage' | 'batch'>('manage');
   const [media, setMedia] = useState<any[]>([]);
   const [tags, setTags] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -166,7 +168,38 @@ const TaggingPage = () => {
         <div className="mb-8">
           <h1 className="text-4xl font-bold text-blue-900 mb-2">Tag Management</h1>
           <p className="text-gray-600">Organize and categorize your media items with tags</p>
+
+          {/* Tab Navigation */}
+          <div className="flex gap-1 mt-6 p-1 bg-blue-100/60 rounded-xl w-fit">
+            <button
+              onClick={() => setActiveTab('manage')}
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                activeTab === 'manage'
+                  ? 'bg-white text-blue-700 shadow-sm'
+                  : 'text-blue-600 hover:text-blue-700 hover:bg-white/50'
+              }`}
+            >
+              <Tags className="size-4" />
+              Tag Manager
+            </button>
+            <button
+              onClick={() => setActiveTab('batch')}
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                activeTab === 'batch'
+                  ? 'bg-white text-blue-700 shadow-sm'
+                  : 'text-blue-600 hover:text-blue-700 hover:bg-white/50'
+              }`}
+            >
+              <Layers className="size-4" />
+              Batch Tagging
+            </button>
+          </div>
         </div>
+
+        {activeTab === 'batch' ? (
+          <BatchTagging />
+        ) : (
+          <>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Media List Sidebar */}
@@ -561,6 +594,8 @@ const TaggingPage = () => {
             </div>
           </div>
         </div>
+          </>
+        )}
       </div>
     </div>
   );
