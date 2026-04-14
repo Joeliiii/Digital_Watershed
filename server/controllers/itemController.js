@@ -300,15 +300,46 @@ const getItemFile = async (req, res) => {
 // @access  Private
 const updateItem = async (req, res) => {
     try {
-        const item = await Item.findById(req.params.id);
+        const item = await Item.findById(req.params.id).populate('projectIds', 'title');
 
         if (item) {
-            // If updating file, we might need to delete old one (logic omitted for simplicity for now, or handle replace)
+            // Detect project association changes before updating
+            const oldProjectIds = (item.projectIds || []).map(p =>
+                typeof p === 'object' ? p._id.toString() : p.toString()
+            );
+            const newProjectIds = req.body.projectIds
+                ? req.body.projectIds.map(p => typeof p === 'object' ? p._id?.toString() || p.toString() : p.toString())
+                : oldProjectIds; // if projectIds not in body, no change
+
+            const addedProjects = newProjectIds.filter(id => !oldProjectIds.includes(id));
+            const removedProjects = oldProjectIds.filter(id => !newProjectIds.includes(id));
+
+            // Perform the update
             const updatedItem = await Item.findByIdAndUpdate(req.params.id, req.body, {
                 new: true,
                 runValidators: true
             }).populate('tagIds').populate('projectIds');
+
             await logAction('update', 'Item', updatedItem._id, { title: updatedItem.title });
+
+            // Log project association changes
+            for (const projectId of addedProjects) {
+                const project = await Project.findById(projectId);
+                await logAction('add_to_project', 'Item', updatedItem._id, {
+                    title: updatedItem.title,
+                    projectId,
+                    projectTitle: project?.title || 'Unknown Project',
+                });
+            }
+            for (const projectId of removedProjects) {
+                const project = await Project.findById(projectId);
+                await logAction('remove_from_project', 'Item', updatedItem._id, {
+                    title: updatedItem.title,
+                    projectId,
+                    projectTitle: project?.title || 'Unknown Project',
+                });
+            }
+
             res.json(updatedItem);
         } else {
             res.status(404).json({ message: 'Item not found' });

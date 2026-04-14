@@ -18,11 +18,16 @@ import {
   FolderOpen,
   TrendingUp,
   Layers,
+  Plus,
+  Trash2,
+  Edit,
+  Unlink,
+  Link,
+  RefreshCw,
 } from 'lucide-react';
 
 // ─── Helpers ───────────────────────────────────────────────────
 
-/** Group items by date bucket (day), returning sorted array */
 function buildCumulativeData(
   items: any[],
   projects: any[],
@@ -39,12 +44,10 @@ function buildCumulativeData(
 
   if (filtered.length === 0) return [];
 
-  // Sort by date ascending
   const sorted = [...filtered].sort(
     (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
   );
 
-  // Build per-day buckets
   const buckets: Record<string, { date: string; count: number; cumulative: number }> = {};
   sorted.forEach((item) => {
     const d = new Date(item.createdAt);
@@ -55,7 +58,6 @@ function buildCumulativeData(
     buckets[key].count++;
   });
 
-  // Compute cumulative
   const result = Object.values(buckets).sort(
     (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
   );
@@ -68,7 +70,6 @@ function buildCumulativeData(
   return result;
 }
 
-/** Format a date string into a readable label */
 function formatDate(dateStr: string, style: 'short' | 'full' = 'short') {
   const d = new Date(dateStr);
   if (style === 'full') {
@@ -98,24 +99,64 @@ function formatTimeAgo(dateStr: string) {
   return `${Math.floor(days / 365)}y ago`;
 }
 
+function getDateKey(dateStr: string) {
+  const d = new Date(dateStr);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// Unified event types for the timeline
+interface TimelineEvent {
+  id: string;
+  type: 'media_added' | 'add_to_project' | 'remove_from_project' | 'create' | 'update' | 'delete';
+  timestamp: string;
+  title: string;
+  description?: string;
+  mediaType?: string;
+  projectTitle?: string;
+  projectColor?: string;
+  projectId?: string;
+  itemId?: string;
+  tags?: any[];
+}
+
+const actionConfig: Record<string, { icon: any; label: string; colorClass: string; bgClass: string }> = {
+  media_added: { icon: Plus, label: 'Media added', colorClass: 'text-blue-600', bgClass: 'bg-blue-100' },
+  create: { icon: Plus, label: 'Created', colorClass: 'text-emerald-600', bgClass: 'bg-emerald-100' },
+  add_to_project: { icon: Link, label: 'Added to project', colorClass: 'text-green-600', bgClass: 'bg-green-100' },
+  remove_from_project: { icon: Unlink, label: 'Removed from project', colorClass: 'text-orange-600', bgClass: 'bg-orange-100' },
+  update: { icon: Edit, label: 'Updated', colorClass: 'text-indigo-600', bgClass: 'bg-indigo-100' },
+  delete: { icon: Trash2, label: 'Deleted', colorClass: 'text-red-600', bgClass: 'bg-red-100' },
+};
+
 // ─── Component ─────────────────────────────────────────────────
 
 const TimelinePage = () => {
   const [media, setMedia] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [projectDropdownOpen, setProjectDropdownOpen] = useState(false);
+  const [showEventTypes, setShowEventTypes] = useState<Record<string, boolean>>({
+    media_added: true,
+    add_to_project: true,
+    remove_from_project: true,
+    create: true,
+    update: false, // hide generic updates by default
+    delete: true,
+  });
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [mediaData, projectsData] = await Promise.all([
+        const [mediaData, projectsData, auditData] = await Promise.all([
           api.getItems(),
           api.getProjects(),
+          api.getAuditLogs({ limit: 100 }),
         ]);
         setMedia(mediaData);
         setProjects(projectsData);
+        setAuditLogs(auditData.logs || []);
       } catch (error) {
         console.error('Failed to load timeline data:', error);
       } finally {
@@ -125,10 +166,112 @@ const TimelinePage = () => {
     fetchData();
   }, []);
 
-  // ─── Derived data ──────────────────────────────────────────
+  // ─── Build unified timeline events ─────────────────────────
 
   const selectedProject = projects.find((p) => p._id === selectedProjectId);
 
+  const timelineEvents: TimelineEvent[] = useMemo(() => {
+    const events: TimelineEvent[] = [];
+    const projectMap = new Map(projects.map((p) => [p._id, p]));
+
+    // Media creation events
+    media.forEach((item) => {
+      const itemProjectIds = (item.projectIds || []).map((p: any) =>
+        typeof p === 'string' ? p : p._id
+      );
+
+      // If filtering by project, only include if item belongs to that project
+      if (selectedProjectId && !itemProjectIds.includes(selectedProjectId)) return;
+
+      const project = itemProjectIds[0] ? projectMap.get(itemProjectIds[0]) : null;
+
+      events.push({
+        id: `media-${item._id}`,
+        type: 'media_added',
+        timestamp: item.createdAt,
+        title: item.title,
+        description: item.description,
+        mediaType: item.metadata?.mimetype || item.mediaType,
+        projectTitle: project?.title || project?.name,
+        projectColor: project?.color,
+        projectId: project?._id,
+        itemId: item._id,
+        tags: item.tagIds,
+      });
+    });
+
+    // Audit log events (add_to_project, remove_from_project, delete, etc.)
+    auditLogs.forEach((log) => {
+      // Skip generic 'create' logs for Items — we already have media_added events
+      if (log.actionType === 'create' && log.targetType === 'Item') return;
+      // Skip generic 'update' logs for Items — we show those only if toggled
+      if (log.actionType === 'update' && log.targetType === 'Item') return;
+
+      // Filter by project for project-specific events
+      if (selectedProjectId) {
+        if (
+          (log.actionType === 'add_to_project' || log.actionType === 'remove_from_project') &&
+          log.details?.projectId !== selectedProjectId
+        ) {
+          return;
+        }
+        // For non-project-specific events like delete, still show if they involved items
+        // that belonged to the selected project — but we can't easily know, so show all
+      }
+
+      const project = log.details?.projectId ? projectMap.get(log.details.projectId) : null;
+
+      events.push({
+        id: `audit-${log._id}`,
+        type: log.actionType as TimelineEvent['type'],
+        timestamp: log.timestamp,
+        title: log.details?.title || log.details?.projectTitle || log.targetType,
+        description: getEventDescription(log),
+        projectTitle: log.details?.projectTitle || project?.title,
+        projectColor: project?.color,
+        projectId: log.details?.projectId,
+        itemId: log.targetType === 'Item' ? log.targetId : undefined,
+      });
+    });
+
+    // Sort newest first
+    events.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+    // Filter by visible event types
+    return events.filter((e) => showEventTypes[e.type] !== false);
+  }, [media, auditLogs, projects, selectedProjectId, showEventTypes]);
+
+  function getEventDescription(log: any): string {
+    switch (log.actionType) {
+      case 'add_to_project':
+        return `Added to "${log.details?.projectTitle || 'project'}"`;
+      case 'remove_from_project':
+        return `Removed from "${log.details?.projectTitle || 'project'}"`;
+      case 'delete':
+        return `${log.targetType} deleted`;
+      case 'create':
+        return `${log.targetType} created`;
+      case 'update':
+        return `${log.targetType} updated`;
+      default:
+        return log.actionType;
+    }
+  }
+
+  // Group events by date
+  const groupedByDate = useMemo(() => {
+    const groups: Record<string, TimelineEvent[]> = {};
+    timelineEvents.forEach((event) => {
+      const key = getDateKey(event.timestamp);
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(event);
+    });
+    return Object.entries(groups).sort(
+      (a, b) => new Date(b[0]).getTime() - new Date(a[0]).getTime()
+    );
+  }, [timelineEvents]);
+
+  // Chart data — still based on media items for cumulative growth
   const filteredMedia = useMemo(() => {
     const items = selectedProjectId
       ? media.filter((m) =>
@@ -149,18 +292,14 @@ const TimelinePage = () => {
   );
 
   const chartColor = selectedProject?.color || '#3B82F6';
-
-  // Stats
   const totalItems = filteredMedia.length;
+
   const dateRange = useMemo(() => {
     if (filteredMedia.length === 0) return null;
     const sorted = [...filteredMedia].sort(
       (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
     );
-    return {
-      first: sorted[0].createdAt,
-      last: sorted[sorted.length - 1].createdAt,
-    };
+    return { first: sorted[0].createdAt, last: sorted[sorted.length - 1].createdAt };
   }, [filteredMedia]);
 
   const typeCounts = useMemo(() => {
@@ -170,23 +309,7 @@ const TimelinePage = () => {
       const label = getMediaLabel(cat);
       counts[label] = (counts[label] || 0) + 1;
     });
-    return Object.entries(counts)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5);
-  }, [filteredMedia]);
-
-  // Group timeline items by date
-  const groupedByDate = useMemo(() => {
-    const groups: Record<string, any[]> = {};
-    filteredMedia.forEach((item) => {
-      const d = new Date(item.createdAt);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-      if (!groups[key]) groups[key] = [];
-      groups[key].push(item);
-    });
-    return Object.entries(groups).sort(
-      (a, b) => new Date(b[0]).getTime() - new Date(a[0]).getTime()
-    );
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 5);
   }, [filteredMedia]);
 
   // ─── Render ──────────────────────────────────────────────────
@@ -431,125 +554,160 @@ const TimelinePage = () => {
           )}
         </div>
 
-        {/* ─── Vertical Timeline ─────────────────────────── */}
-        <div className="mb-4">
-          <h2 className="text-lg font-semibold text-blue-900 mb-1">Activity Feed</h2>
-          <p className="text-xs text-gray-400">
-            {filteredMedia.length} item{filteredMedia.length !== 1 ? 's' : ''} sorted by newest first
-          </p>
+        {/* ─── Event Type Filters ─────────────────────────── */}
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-lg font-semibold text-blue-900 mb-1">Activity Feed</h2>
+            <p className="text-xs text-gray-400">
+              {timelineEvents.length} event{timelineEvents.length !== 1 ? 's' : ''}
+            </p>
+          </div>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {Object.entries(actionConfig).map(([type, config]) => {
+              const Icon = config.icon;
+              const active = showEventTypes[type] !== false;
+              return (
+                <button
+                  key={type}
+                  onClick={() =>
+                    setShowEventTypes((prev) => ({ ...prev, [type]: !prev[type] }))
+                  }
+                  className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium border transition-all ${
+                    active
+                      ? `${config.bgClass} ${config.colorClass} border-transparent`
+                      : 'bg-white text-gray-400 border-gray-200 opacity-60'
+                  }`}
+                >
+                  <Icon className="size-3" />
+                  {config.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
+        {/* ─── Vertical Timeline ─────────────────────────── */}
         {groupedByDate.length > 0 ? (
           <div className="relative">
             {/* Timeline spine */}
             <div className="absolute left-[23px] top-6 bottom-6 w-0.5 bg-gradient-to-b from-blue-200 via-blue-100 to-transparent" />
 
             <div className="space-y-8">
-              {groupedByDate.map(([dateKey, items]) => (
-                <div key={dateKey} className="relative">
-                  {/* Date badge */}
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="relative z-10 w-[47px] h-[47px] rounded-full bg-white border-2 border-blue-200 flex items-center justify-center shadow-sm">
-                      <Calendar className="size-4 text-blue-500" />
-                    </div>
-                    <div>
-                      <div className="text-sm font-semibold text-blue-900">
-                        {formatDate(dateKey, 'full')}
-                      </div>
-                      <div className="text-[11px] text-gray-400">
-                        {items.length} item{items.length !== 1 ? 's' : ''} added
-                      </div>
-                    </div>
-                  </div>
+              {groupedByDate.map(([dateKey, events]) => {
+                // Count event types for this day
+                const addCount = events.filter((e) => e.type === 'media_added' || e.type === 'create').length;
+                const removeCount = events.filter((e) => e.type === 'remove_from_project').length;
+                const otherCount = events.length - addCount - removeCount;
 
-                  {/* Items for this date */}
-                  <div className="ml-[59px] space-y-2">
-                    {items.map((item: any) => {
-                      const mimeType = item.metadata?.mimetype || item.mediaType;
-                      const Icon = getMediaIcon(mimeType);
-                      const itemProject = item.projectIds?.[0];
-                      const project = itemProject
-                        ? projects.find(
-                            (p) =>
-                              p._id ===
-                              (typeof itemProject === 'string'
-                                ? itemProject
-                                : itemProject._id)
-                          )
-                        : null;
+                const daySummaryParts: string[] = [];
+                if (addCount > 0) daySummaryParts.push(`${addCount} added`);
+                if (removeCount > 0) daySummaryParts.push(`${removeCount} removed`);
+                if (otherCount > 0) daySummaryParts.push(`${otherCount} other`);
 
-                      return (
-                        <div
-                          key={item._id}
-                          className="group bg-white rounded-xl p-4 border border-gray-100 hover:border-blue-200 hover:shadow-md transition-all"
-                        >
-                          <div className="flex items-start gap-3">
-                            <div
-                              className={`p-2 rounded-lg shrink-0 ${getTypeColor(mimeType)}`}
-                            >
-                              <Icon className="size-4" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 mb-0.5">
-                                <h4 className="text-sm font-semibold text-gray-900 truncate">
-                                  {item.title}
-                                </h4>
+                return (
+                  <div key={dateKey} className="relative">
+                    {/* Date badge */}
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="relative z-10 w-[47px] h-[47px] rounded-full bg-white border-2 border-blue-200 flex items-center justify-center shadow-sm">
+                        <Calendar className="size-4 text-blue-500" />
+                      </div>
+                      <div>
+                        <div className="text-sm font-semibold text-blue-900">
+                          {formatDate(dateKey, 'full')}
+                        </div>
+                        <div className="text-[11px] text-gray-400">
+                          {daySummaryParts.join(' · ')}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Events for this date */}
+                    <div className="ml-[59px] space-y-2">
+                      {events.map((event) => {
+                        const config = actionConfig[event.type] || actionConfig.create;
+                        const Icon = event.type === 'media_added' && event.mediaType
+                          ? getMediaIcon(event.mediaType)
+                          : config.icon;
+                        const colorClasses = event.type === 'media_added' && event.mediaType
+                          ? getTypeColor(event.mediaType)
+                          : `${config.bgClass} ${config.colorClass}`;
+
+                        return (
+                          <div
+                            key={event.id}
+                            className="group bg-white rounded-xl p-4 border border-gray-100 hover:border-blue-200 hover:shadow-md transition-all"
+                          >
+                            <div className="flex items-start gap-3">
+                              <div className={`p-2 rounded-lg shrink-0 ${colorClasses}`}>
+                                <Icon className="size-4" />
                               </div>
-                              {item.description && (
-                                <p className="text-xs text-gray-500 line-clamp-1 mb-1.5">
-                                  {item.description}
-                                </p>
-                              )}
-                              <div className="flex items-center gap-3 text-[11px] text-gray-400">
-                                <span>{getMediaLabel(mimeType)}</span>
-                                {project && (
-                                  <span className="flex items-center gap-1">
-                                    <FolderOpen className="size-3" />
-                                    {project.title || project.name}
-                                  </span>
-                                )}
-                                <span>{formatTimeAgo(item.createdAt)}</span>
-                              </div>
-                              {/* Tags */}
-                              {item.tagIds && item.tagIds.length > 0 && (
-                                <div className="flex flex-wrap gap-1 mt-2">
-                                  {item.tagIds.slice(0, 4).map((tag: any) => {
-                                    const name =
-                                      typeof tag === 'string' ? tag : tag?.name;
-                                    if (!name) return null;
-                                    return (
-                                      <span
-                                        key={typeof tag === 'string' ? tag : tag._id}
-                                        className="px-1.5 py-0.5 rounded text-[10px] bg-blue-50 text-blue-600 font-medium"
-                                      >
-                                        {name}
-                                      </span>
-                                    );
-                                  })}
-                                  {item.tagIds.length > 4 && (
-                                    <span className="px-1.5 py-0.5 rounded text-[10px] bg-gray-100 text-gray-500">
-                                      +{item.tagIds.length - 4}
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-0.5">
+                                  <h4 className="text-sm font-semibold text-gray-900 truncate">
+                                    {event.title}
+                                  </h4>
+                                  {/* Event type badge for non-media events */}
+                                  {event.type !== 'media_added' && (
+                                    <span className={`shrink-0 px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase tracking-wide ${config.bgClass} ${config.colorClass}`}>
+                                      {config.label}
                                     </span>
                                   )}
                                 </div>
+                                {event.description && (
+                                  <p className="text-xs text-gray-500 line-clamp-1 mb-1.5">
+                                    {event.description}
+                                  </p>
+                                )}
+                                <div className="flex items-center gap-3 text-[11px] text-gray-400">
+                                  {event.mediaType && (
+                                    <span>{getMediaLabel(event.mediaType)}</span>
+                                  )}
+                                  {event.projectTitle && (
+                                    <span className="flex items-center gap-1">
+                                      <FolderOpen className="size-3" />
+                                      {event.projectTitle}
+                                    </span>
+                                  )}
+                                  <span>{formatTimeAgo(event.timestamp)}</span>
+                                </div>
+                                {/* Tags */}
+                                {event.tags && event.tags.length > 0 && (
+                                  <div className="flex flex-wrap gap-1 mt-2">
+                                    {event.tags.slice(0, 4).map((tag: any) => {
+                                      const name = typeof tag === 'string' ? tag : tag?.name;
+                                      if (!name) return null;
+                                      return (
+                                        <span
+                                          key={typeof tag === 'string' ? tag : tag._id}
+                                          className="px-1.5 py-0.5 rounded text-[10px] bg-blue-50 text-blue-600 font-medium"
+                                        >
+                                          {name}
+                                        </span>
+                                      );
+                                    })}
+                                    {event.tags.length > 4 && (
+                                      <span className="px-1.5 py-0.5 rounded text-[10px] bg-gray-100 text-gray-500">
+                                        +{event.tags.length - 4}
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                              {/* Project color indicator */}
+                              {event.projectColor && (
+                                <div
+                                  className="w-1.5 h-10 rounded-full shrink-0 opacity-60 group-hover:opacity-100 transition-opacity"
+                                  style={{ backgroundColor: event.projectColor }}
+                                />
                               )}
                             </div>
-                            {/* Project color indicator */}
-                            {project && (
-                              <div
-                                className="w-1.5 h-10 rounded-full shrink-0 opacity-60 group-hover:opacity-100 transition-opacity"
-                                style={{
-                                  backgroundColor: project.color || '#3B82F6',
-                                }}
-                              />
-                            )}
                           </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         ) : (
@@ -558,8 +716,8 @@ const TimelinePage = () => {
             <h3 className="text-lg font-semibold text-blue-900 mb-1">No Activity</h3>
             <p className="text-sm text-gray-400">
               {selectedProject
-                ? `No items have been added to "${selectedProject.title || selectedProject.name}" yet.`
-                : 'No items have been created yet. Upload some media to see your timeline.'}
+                ? `No activity recorded for "${selectedProject.title || selectedProject.name}" yet.`
+                : 'No activity has been recorded yet. Upload some media to see your timeline.'}
             </p>
           </div>
         )}

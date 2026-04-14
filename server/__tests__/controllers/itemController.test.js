@@ -1,5 +1,11 @@
 import { EventEmitter } from 'events';
 
+// Mock audit logging so it doesn't pull in the real AuditLog model
+jest.mock('../../controllers/auditLogController.js', () => ({
+    __esModule: true,
+    logAction: jest.fn().mockResolvedValue(undefined),
+}));
+
 // Mock all models
 jest.mock('../../models/Item.js', () => {
     const mockModel = jest.fn();

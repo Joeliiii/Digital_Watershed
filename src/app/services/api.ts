@@ -58,6 +58,10 @@ export const api = {
         const response = await fetch(`${API_URL}/projects`);
         return handleResponse(response);
     },
+    getProject: async (id: string) => {
+        const response = await fetch(`${API_URL}/projects/${id}`);
+        return handleResponse(response);
+    },
     createProject: async (data: any) => {
         const response = await fetch(`${API_URL}/projects`, {
             method: 'POST',

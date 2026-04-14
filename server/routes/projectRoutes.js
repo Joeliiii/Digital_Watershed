@@ -2,6 +2,7 @@ import express from 'express';
 const router = express.Router();
 import {
     getProjects,
+    getProjectById,
     createProject,
     updateProject,
     deleteProject,
@@ -18,6 +19,7 @@ router.route('/')
 router.get('/shared/:token', getSharedProject);
 
 router.route('/:id')
+    .get(getProjectById)
     .put(updateProject)
     .delete(deleteProject);
 
@@ -25,3 +27,4 @@ router.post('/:id/share', generateShareLink);
 router.delete('/:id/share', revokeShareLink);
 
 export default router;
+

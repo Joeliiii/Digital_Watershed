@@ -15,6 +15,24 @@ const getProjects = async (req, res) => {
     }
 };
 
+// @desc    Get a single project with its media items
+// @route   GET /api/projects/:id
+// @access  Private
+const getProjectById = async (req, res) => {
+    try {
+        const project = await Project.findById(req.params.id);
+        if (!project) {
+            return res.status(404).json({ message: 'Project not found' });
+        }
+        const items = await Item.find({ projectIds: project._id })
+            .populate('tagIds', 'name color')
+            .sort({ createdAt: -1 });
+        res.json({ project, items });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
 // @desc    Create a project
 // @route   POST /api/projects
 // @access  Private
@@ -131,6 +149,7 @@ const getSharedProject = async (req, res) => {
 
 export {
     getProjects,
+    getProjectById,
     createProject,
     updateProject,
     deleteProject,

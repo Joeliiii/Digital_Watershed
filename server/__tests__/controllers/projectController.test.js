@@ -1,3 +1,9 @@
+// Mock audit logging
+jest.mock('../../controllers/auditLogController.js', () => ({
+    __esModule: true,
+    logAction: jest.fn().mockResolvedValue(undefined),
+}));
+
 jest.mock('../../models/Project.js', () => {
     const mockModel = {
         find: jest.fn(),

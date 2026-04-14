@@ -2,7 +2,7 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { WatershedProvider } from '@/app/context/WatershedContext';
 import Navigation from '@/app/components/Navigation';
 import HomePage from '@/app/pages/HomePage';
-import CreateProjectPage from '@/app/pages/CreateProjectPage';
+import ProjectsPage from '@/app/pages/ProjectsPage';
 import TaggingPage from '@/app/pages/TaggingPage';
 import DashboardPage from '@/app/pages/DashboardPage';
 import MediaPage from '@/app/pages/MediaPage';
@@ -30,7 +30,7 @@ export default function App() {
             <Route path="/media/create" element={<CreateMediaPage />} />
             <Route path="/media/bulk-upload" element={<BulkUploadPage />} />
             <Route path="/media/:id" element={<MediaDetailPage />} />
-            <Route path="/create-project" element={<CreateProjectPage />} />
+            <Route path="/projects" element={<ProjectsPage />} />
             <Route path="/network" element={<NetworkGraphPage />} />
             <Route path="/shared/:token" element={<SharedProjectPage />} />
             <Route path="/timeline" element={<TimelinePage />} />
