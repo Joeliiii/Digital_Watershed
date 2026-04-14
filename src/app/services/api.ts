@@ -202,5 +202,37 @@ export const api = {
         if (params?.actionType) searchParams.set('actionType', params.actionType);
         const response = await fetch(`${API_URL}/audit-logs?${searchParams.toString()}`);
         return handleResponse(response);
-    }
+    },
+
+    // Admin
+    getUsers: async () => {
+        const response = await fetch(`${API_URL}/admin/users`);
+        return handleResponse(response);
+    },
+    createUser: async (data: { name: string; email: string; password: string; role?: string }) => {
+        const response = await fetch(`${API_URL}/admin/users`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        });
+        return handleResponse(response);
+    },
+    updateUser: async (id: string, data: any) => {
+        const response = await fetch(`${API_URL}/admin/users/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        });
+        return handleResponse(response);
+    },
+    deleteUser: async (id: string) => {
+        const response = await fetch(`${API_URL}/admin/users/${id}`, {
+            method: 'DELETE',
+        });
+        return handleResponse(response);
+    },
+    getStorageStats: async () => {
+        const response = await fetch(`${API_URL}/admin/storage`);
+        return handleResponse(response);
+    },
 };

@@ -1,17 +1,18 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Home, FolderPlus, Tags, LayoutDashboard, Database, Network, Calendar } from 'lucide-react';
+import { Home, FolderPlus, Tags, LayoutDashboard, Database, Network, Calendar, Shield } from 'lucide-react';
 
 const Navigation = () => {
   const location = useLocation();
 
   const navItems = [
-    { path: '/', label: 'Home', icon: Home },
+    { path: '/home', label: 'Home', icon: Home },
     { path: '/projects', label: 'Projects', icon: FolderPlus },
     { path: '/tagging', label: 'Tagging', icon: Tags },
     { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { path: '/media', label: 'Media', icon: Database },
     { path: '/network', label: 'Network Graph', icon: Network },
     { path: '/timeline', label: 'Timeline', icon: Calendar },
+    { path: '/admin', label: 'Admin', icon: Shield },
   ];
 
   return (

@@ -29,7 +29,7 @@ const LoginPage = () => {
                 console.log('Login successful:', data);
                 // In a real app, you'd store the token here (e.g., localStorage or context)
                 // localStorage.setItem('userInfo', JSON.stringify(data));
-                navigate('/dashboard');
+                navigate('/home');
             } else {
                 setError(data.message || 'Login failed');
             }
