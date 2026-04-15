@@ -72,7 +72,17 @@ const AdminPage = () => {
   const [storageStats, setStorageStats] = useState<any>(null);
   const [storageLoading, setStorageLoading] = useState(false);
 
-  // ─── Fetch users ─────────────────────────────────
+  // Audit
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditPage, setAuditPage] = useState(1);
+
+  // Export
+  const [exporting, setExporting] = useState(false);
+  const [exportType, setExportType] = useState('all');
+
+  // ───────────── FUNCTIONS ─────────────
+
   const fetchUsers = useCallback(async () => {
     try {
       const data = await api.getUsers();
@@ -84,11 +94,43 @@ const AdminPage = () => {
     }
   }, []);
 
+  const fetchAuditLogs = async (page = 1) => {
+    setAuditLoading(true);
+    try {
+      const data = await api.getAuditLogs({ page, limit: 20 });
+      setAuditLogs(data.logs);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setAuditLoading(false);
+    }
+  };
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      // TODO: Implement exportData in API service
+      console.log('Export type:', exportType);
+      alert('Export functionality not yet implemented');
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  // ───────────── EFFECTS ─────────────
+
   useEffect(() => {
     fetchUsers();
   }, [fetchUsers]);
 
-  // ─── Fetch storage on tab switch ─────────────────
+  useEffect(() => {
+    if (activeTab === 'audit') {
+      fetchAuditLogs(auditPage);
+    }
+  }, [activeTab, auditPage]);
+
   useEffect(() => {
     if (activeTab === 'storage' && !storageStats) {
       setStorageLoading(true);
@@ -107,8 +149,8 @@ const AdminPage = () => {
     try {
       const newUser = await api.createUser(createForm);
       setUsers((prev) => [newUser, ...prev]);
-      setCreateForm({ name: '', email: '', password: '', role: 'user' });
       setShowCreateUser(false);
+      setCreateForm({ name: '', email: '', password: '', role: 'user' });
     } catch (err: any) {
       setCreateError(err.message || 'Failed to create user');
     } finally {
@@ -151,6 +193,8 @@ const AdminPage = () => {
     { key: 'audit', label: 'Audit Log', icon: FileText },
     { key: 'export', label: 'Bulk Export', icon: Download },
   ];
+
+  // ───────────── RETURN ─────────────
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white">
@@ -561,27 +605,78 @@ const AdminPage = () => {
 
         {/* ═══════════════ AUDIT LOG (Shell) ═══════════════ */}
         {activeTab === 'audit' && (
-          <div className="bg-white rounded-2xl shadow-sm border border-blue-100 p-16 text-center">
-            <Construction className="size-16 text-gray-200 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-gray-600 mb-2">Audit Log</h3>
-            <p className="text-gray-400 text-sm max-w-md mx-auto">
-              View a complete history of all creations, updates, and deletions across the system.
-              This feature is coming soon.
-            </p>
+  <div className="bg-white rounded-2xl shadow-sm border border-blue-100 overflow-hidden">
+    <div className="px-6 py-4 border-b border-blue-50 flex justify-between">
+      <h3 className="text-sm font-semibold text-blue-900">Audit Log</h3>
+    </div>
+
+    {auditLoading ? (
+      <div className="p-10 text-center">Loading...</div>
+    ) : (
+      <div className="divide-y">
+        {auditLogs.map((log) => (
+          <div key={log._id} className="px-6 py-3 text-sm flex justify-between">
+            <div>
+              <span className="font-medium text-gray-800">
+                {log.user?.name || 'System'}
+              </span>{' '}
+              <span className="text-gray-500">
+                {log.action} {log.entityType}
+              </span>
+              {log.entityName && (
+                <span className="ml-1 text-blue-600">
+                  "{log.entityName}"
+                </span>
+              )}
+            </div>
+            <div className="text-xs text-gray-400">
+              {new Date(log.createdAt).toLocaleString()}
+            </div>
           </div>
-        )}
+        ))}
+      </div>
+    )}
+
+    {/* Pagination */}
+    <div className="p-4 flex justify-between">
+      <button onClick={() => setAuditPage((p) => Math.max(1, p - 1))}>
+        Prev
+      </button>
+      <button onClick={() => setAuditPage((p) => p + 1)}>
+        Next
+      </button>
+    </div>
+  </div>
+)}
 
         {/* ═══════════════ BULK EXPORT (Shell) ═══════════════ */}
         {activeTab === 'export' && (
-          <div className="bg-white rounded-2xl shadow-sm border border-blue-100 p-16 text-center">
-            <Construction className="size-16 text-gray-200 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-gray-600 mb-2">Bulk Export</h3>
-            <p className="text-gray-400 text-sm max-w-md mx-auto">
-              Export selected items or entire projects as ZIP archives with metadata.
-              This feature is coming soon.
-            </p>
-          </div>
-        )}
+  <div className="bg-white rounded-2xl shadow-sm border border-blue-100 p-6 max-w-xl">
+    <h3 className="text-lg font-semibold text-blue-900 mb-4">
+      Bulk Export
+    </h3>
+
+    <label className="block text-sm mb-2">Select Data Type</label>
+    <select
+      value={exportType}
+      onChange={(e) => setExportType(e.target.value)}
+      className="w-full mb-4 px-3 py-2 border rounded-lg"
+    >
+      <option value="all">Everything</option>
+      <option value="items">Items</option>
+      <option value="projects">Projects</option>
+      <option value="users">Users</option>
+    </select>
+
+    <button
+      onClick={handleExport}
+      disabled={exporting}
+      className="px-4 py-2 bg-blue-600 text-white rounded-lg"
+    >
+      {exporting ? 'Exporting...' : 'Download ZIP'}
+    </button>
+  </div>
+)}
       </div>
     </div>
   );

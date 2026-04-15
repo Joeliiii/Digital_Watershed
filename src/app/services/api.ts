@@ -235,4 +235,22 @@ export const api = {
         const response = await fetch(`${API_URL}/admin/storage`);
         return handleResponse(response);
     },
+
+    // BULK EXPORT
+exportData: async (payload: {
+    type: 'all' | 'items' | 'projects' | 'users';
+    ids?: string[];
+}) => {
+    const response = await fetch(`${API_URL}/admin/export`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+        throw new Error('Export failed');
+    }
+
+    return response.blob();
+},
 };
