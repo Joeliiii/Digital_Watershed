@@ -11,6 +11,7 @@ import artworkRoutes from './routes/artworkRoutes.js';
 import noteRoutes from './routes/noteRoutes.js';
 import auditLogRoutes from './routes/auditLogRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
+import AuditLog from './models/AuditLog.js';
 
 dotenv.config();
 
@@ -56,3 +57,18 @@ connectDB().then(() => {
     console.error('Failed to connect to database', err);
     process.exit(1);
 });
+
+//Migrate existing audit logs to new schema if needed
+mongoose.connect(process.env.MONGODB_URI)
+    .then(async () => {
+        console.log('MongoDB connected');
+        
+        // ONE-TIME MIGRATION - run this once to update existing audit logs with createdAt
+        const result = await AuditLog.updateMany(
+            { createdAt: { $exists: false } },
+            [{ $set: { createdAt: '$timestamp' } }]
+        );
+        console.log(`Migrated ${result.modifiedCount} audit logs`);
+        // END MIGRATION
+    })
+    .catch(err => console.error('MongoDB connection error:', err));

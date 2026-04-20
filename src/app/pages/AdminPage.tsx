@@ -615,8 +615,8 @@ const AdminPage = () => {
     ) : (
       <div className="divide-y">
         {auditLogs.map((log) => (
-          <div key={log._id} className="px-6 py-3 text-sm flex justify-between">
-            <div>
+          <div key={log._id} className="px-6 py-3 text-sm flex items-start justify-between gap-4">
+            <div className="flex-1 min-w-0">
               <span className="font-medium text-gray-800">
                 {log.user?.name || 'System'}
               </span>{' '}
@@ -629,20 +629,32 @@ const AdminPage = () => {
                 </span>
               )}
             </div>
-            <div className="text-xs text-gray-400">
-              {new Date(log.createdAt).toLocaleString()}
+            <div className="text-xs text-gray-400 whitespace-nowrap flex-shrink-0">
+              {(() => {
+                const date = log.createdAt ? new Date(log.createdAt) : null;
+                return date && !isNaN(date.getTime())
+                  ? date.toLocaleString()
+                  : '—';
+              })()}
             </div>
           </div>
         ))}
       </div>
     )}
-
     {/* Pagination */}
     <div className="p-4 flex justify-between">
-      <button onClick={() => setAuditPage((p) => Math.max(1, p - 1))}>
+      <button 
+        onClick={() => setAuditPage((p) => Math.max(1, p - 1))}
+        className="px-4 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded"
+        disabled={auditPage === 1}
+      >
         Prev
       </button>
-      <button onClick={() => setAuditPage((p) => p + 1)}>
+      <span className="text-sm text-gray-500">Page {auditPage}</span>
+      <button 
+        onClick={() => setAuditPage((p) => p + 1)}
+        className="px-4 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded"
+      >
         Next
       </button>
     </div>

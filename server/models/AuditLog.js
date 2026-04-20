@@ -17,13 +17,11 @@ const AuditLogSchema = new mongoose.Schema({
     targetId: {
         type: mongoose.Schema.Types.ObjectId
     },
-    timestamp: {
-        type: Date,
-        default: Date.now
-    },
     details: {
         type: mongoose.Schema.Types.Mixed
     }
+}, {
+    timestamps: true 
 });
 
 export default mongoose.model('AuditLog', AuditLogSchema);
