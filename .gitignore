@@ -1,1 +1,11 @@
 node_modules
+
+# Local environment files and secrets (never commit)
+.env
+.env.*
+!.env.example
+
+# Java backend build output and local media storage
+backend/target/
+storage/
+uploads/
